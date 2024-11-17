@@ -1,0 +1,105 @@
+# Sample Guishap Program
+## 
+This is a demonstration of the Guishap programming language
+featuring all major language constructs
+##
+
+# Define a collection for storing student information
+col Student {
+    _name%string,
+    _age%int,
+    _grades%float[]
+};
+
+# Constants declaration
+__PI%float:3.14159;
+__MAX_STUDENTS%int:100;
+
+# Function to calculate average grade
+shap calculateAverage (_grades%float[])>float {
+    _sum%float:0.0;
+    _count%int:0;
+    
+    loop for [0..2..1] {
+        sum:sum+grades[count];
+        count:count+1;
+    }
+    
+    ret sum/count;
+}
+
+# Function to determine grade letter
+shap getGradeLetter (_score%float)>string {
+    case [score] {
+        [90.0]: ret "A";
+        [80.0]: ret "B";
+        [70.0]: ret "C";
+        [60.0]: ret "D";
+        []: ret "F";  # Default case
+    }
+}
+
+# Main function
+shap main ()>int {
+    # Variable declarations
+    _student%Student:{
+        name:"John Doe",
+        age:20,
+        grades:[85.5, 90.0, 88.5]
+    };
+    
+    _average%float:0.0;
+    _grade%string:"";
+    
+    # Calculate student's average
+    average:calculateAverage(student.grades);
+    
+    # Determine letter grade
+    grade:getGradeLetter(average);
+    
+    # Conditional statement example
+    if [average >= 90.0] {
+        # Print high achiever message
+        _message%string:"Excellent performance!";
+        print(message);
+    } elif [average >= 80.0] {
+        _message%string:"Good job!";
+        print(message);
+    } else {
+        _message%string:"Keep working hard!";
+        print(message);
+    }
+    
+    
+    # Loop example - process multiple scores
+    _scores%float[]:[78.5, 82.0, 91.5, 88.0, 95.0];
+    _sum%float:0.0;
+    
+    # Using till loop
+    _i%int:0;
+    loop till [i < 5] {
+        sum: sum + scores[i];
+        if [scores[i] > 90.0] {
+            continue;  # Skip the rest of this iteration
+        }
+        i: i + 1;
+    }
+    
+    # Using for loop with array
+    loop for [0..4..1] {
+        if [scores[i] < 80.0] {
+            break;  # Exit the loop
+        }
+    }
+    
+    # Bitwise operations example
+    _flags%int:5;
+    _mask%int:3;
+    _result%int:flags & mask;
+    
+    # Mathematical operations
+    _circle_area%float:PI * radius ^ 2;
+    _remainder%int:17 % 5;
+    
+    ret 0;
+}
