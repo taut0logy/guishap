@@ -7,7 +7,7 @@ featuring all major language constructs
 # Define a collection
 col Student {
     _name%string,
-    _age%int
+    _age%int,
     _grades%float[]
 };
 
