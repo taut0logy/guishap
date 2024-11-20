@@ -1,0 +1,24 @@
+IDENTIFIER: This
+IDENTIFIER: is
+IDENTIFIER: a
+IDENTIFIER: demonstration
+IDENTIFIER: of
+IDENTIFIER: the
+IDENTIFIER: Guishap
+IDENTIFIER: programming
+IDENTIFIER: language
+IDENTIFIER: featuring
+IDENTIFIER: all
+IDENTIFIER: major
+IDENTIFIER: language
+IDENTIFIER: constructs
+
+Analysis Summary:
+----------------
+Functions: 0
+Collections: 0
+Variables: 0
+Constants: 0
+Loops: 0
+Conditions: 0
+Comments: 3 (Line: 2, Block: 1)

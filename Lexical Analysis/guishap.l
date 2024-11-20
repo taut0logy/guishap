@@ -5,6 +5,7 @@
 
 int keywords = 0;
 int identifiers = 0;
+int declarations = 0;
 int operators = 0;
 int loops = 0;
 int functions = 0;
@@ -19,8 +20,6 @@ int arrays = 0;
 FILE *outp;
 %}
 
-%x BLOCK_COMMENT
-%x STRING
 
 %%
     /* Keywords and Types */
@@ -34,9 +33,9 @@ FILE *outp;
 }
 
     /* Variable and Constant Declarations */
-"__"[a-zA-Z][a-zA-Z0-9_]*"%"[a-zA-Z]+    { constants++; fprintf(outp, "CONSTANT: %s\n", yytext); }
-"_"[a-zA-Z][a-zA-Z0-9_]*"%"[a-zA-Z]+     { identifiers++; fprintf(outp, "IDENTIFIER: %s\n", yytext); }
-"_"[a-zA-Z][a-zA-Z0-9_]*"%"[a-zA-Z]+"\[\]" { 
+"__"[a-zA-Z][a-zA-Z0-9_]*"%"[a-zA-Z]+    { constants++; declarations++; fprintf(outp, "CONSTANT DECLARATION: %s\n", yytext); }
+"_"[a-zA-Z][a-zA-Z0-9_]*"%"[a-zA-Z]+     { identifiers++; declarations++; fprintf(outp, "VARIABLE DECLARATION: %s\n", yytext); }
+"_"[a-zA-Z][a-zA-Z0-9_]*"%"[a-zA-Z]+"\[\]" {
     identifiers++; 
     arrays++; 
     fprintf(outp, "ARRAY_IDENTIFIER: %s\n", yytext); 
@@ -44,17 +43,18 @@ FILE *outp;
 
     /* Loops */
 "loop"[ \t]+"till"    { loops++; keywords++; fprintf(outp, "LOOP_TILL: %s\n", yytext); }
-"loop"[ \t]+"for"     { loops++; keywords++; fprintf(outp, "LOOP_FOR: %s\n", yytext); }
+"loop"[ \t]+"_"[a-zA-Z][a-zA-Z0-9_]*"%"[a-zA-Z]+[ \t]+"for"     { loops++; keywords++; declarations; fprintf(outp, "LOOP_FOR: %s\n", yytext); }
+"loop"[ \t]+[a-zA-Z][a-zA-Z0-9_]*[ \t]+"for"     { loops++; keywords++; identifiers; fprintf(outp, "LOOP_FOR: %s\n", yytext); }
 "break"               { keywords++; fprintf(outp, "BREAK\n"); }
 "continue"            { keywords++; fprintf(outp, "CONTINUE\n"); }
 
     /* Functions */
-"shap"[ \t]+[a-zA-Z][a-zA-Z0-9_]*  { 
+"shap"[ \t]+[a-zA-Z][a-zA-Z0-9_]*  {
     functions++; 
     keywords++; 
     fprintf(outp, "FUNCTION: %s\n", yytext);
 }
-"ret"                 { keywords++; fprintf(outp, "RETURN\n"); }
+"ret"                { keywords++; fprintf(outp, "RETURN\n"); }
 
     /* Conditions */
 "if"[ \t]*"["        { conditions++; keywords++; fprintf(outp, "IF\n"); }
@@ -95,7 +95,7 @@ FILE *outp;
 [ \t\n]+            { /* Ignore whitespace */ }
 
     /* Catch any other character */
-.                   { fprintf(outp, "UNKNOWN: %s\n", yytext); }
+.    { fprintf(outp, "UNKNOWN TOKEN: %s\n", yytext); }
 
 %%
 
@@ -119,6 +119,7 @@ int main() {
     fprintf(outp, "\nToken Counts:\n");
     fprintf(outp, "-------------\n");
     fprintf(outp, "Keywords: %d\n", keywords);
+    fprintf(outp, "Declarations: %d\n", declarations);
     fprintf(outp, "Identifiers: %d\n", identifiers);
     fprintf(outp, "Constants: %d\n", constants);
     fprintf(outp, "Operators: %d\n", operators);

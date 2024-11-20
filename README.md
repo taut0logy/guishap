@@ -161,7 +161,7 @@ loop till [_counter < 10] {
 #### For Loop (Range-based)
 
 ```guishap
-loop for [0..5..1] {    # start..end..step
+loop _i%int for [0..5..1] {    # start..end..step
     total:total + array[i];
 }
 ```
@@ -180,7 +180,7 @@ continue;   # Skip to next iteration
 ```guishap
 shap calculateAverage (_numbers%float[])>float {
     _sum%float:0.0;
-    loop for [0.._length..1] {
+    loop _i%int for [0.._length..1] {
         sum:sum + numbers[i];
     }
     ret sum/length;
@@ -306,7 +306,7 @@ col Student {
 
 shap calculateGrade (_grades%float[])>string {
     _avg%float:0.0;
-    loop for [0..len(grades)..1] {
+    loop _i%int for [0..len(grades)..1] {
         avg:avg + grades[i];
     }
     avg:avg / len(grades);
@@ -326,7 +326,7 @@ shap calculateGrade (_grades%float[])>string {
 ```guishap
 shap findMax (_numbers%int[])>int {
     _max%int:numbers[0];
-    loop for [1..len(numbers)..1] {
+    loop _i%int for [1..len(numbers)..1] {
         if [numbers[i] > _max] {
             max:numbers[i];
         }

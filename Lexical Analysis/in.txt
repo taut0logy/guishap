@@ -4,10 +4,10 @@ This is a demonstration of the Guishap programming language
 featuring all major language constructs
 ##
 
-# Define a collection for storing student information
+# Define a collection
 col Student {
     _name%string,
-    _age%int,
+    _age%int
     _grades%float[]
 };
 
@@ -15,12 +15,12 @@ col Student {
 __PI%float:3.14159;
 __MAX_STUDENTS%int:100;
 
-# Function to calculate average grade
-shap calculateAverage (_grades%float[])>float {
+# Function
+shap calcAvg (_grades%float[])>float {
     _sum%float:0.0;
     _count%int:0;
     
-    loop for [0..2..1] {
+    loop count for [0..2..1] {
         sum:sum+grades[count];
         count:count+1;
     }
@@ -28,8 +28,8 @@ shap calculateAverage (_grades%float[])>float {
     ret sum/count;
 }
 
-# Function to determine grade letter
-shap getGradeLetter (_score%float)>string {
+# Function and case
+shap getGrade (_score%float)>string {
     case [score] {
         [90.0]: ret "A";
         [80.0]: ret "B";
@@ -51,13 +51,11 @@ shap main ()>int {
     _average%float:0.0;
     _grade%string:"";
     
-    # Calculate student's average
-    average:calculateAverage(student.grades);
+    average:calcAvg(student.grades);
     
-    # Determine letter grade
-    grade:getGradeLetter(average);
+    grade:getGrade(average);
     
-    # Conditional statement example
+    # Conditional statement
     if [average >= 90.0] {
         # Print high achiever message
         _message%string:"Excellent performance!";
@@ -71,7 +69,7 @@ shap main ()>int {
     }
     
     
-    # Loop example - process multiple scores
+    # Loop example
     _scores%float[]:[78.5, 82.0, 91.5, 88.0, 95.0];
     _sum%float:0.0;
     
@@ -86,7 +84,7 @@ shap main ()>int {
     }
     
     # Using for loop with array
-    loop for [0..4..1] {
+    loop _i%int for [0..4..1] {
         if [scores[i] < 80.0] {
             break;  # Exit the loop
         }
