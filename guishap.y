@@ -54,39 +54,83 @@ int check_main_defined() {
     int intValue;
     float floatValue;
     char *stringValue;
+    struct {
+        char *name;
+        char *type;
+    } declaration;
+    struct {
+        char *name;
+        char *returnType;
+    } function;
 }
 
 %token <stringValue> IDENTIFIER
 %token <intValue> INTEGER
 %token <floatValue> FLOAT
-%token KEYWORD COLLECTION CONSTANT_DECLARATION VARIABLE_DECLARATION ARRAY_IDENTIFIER LOOP_TILL LOOP_FOR BREAK CONTINUE FUNCTION RETURN IF ELIF ELSE CASE BLOCK_COMMENT LINE_COMMENT CONDITIONAL_OPERATOR LOGICAL_OPERATOR BITWISE_OPERATOR ARITHMETIC_OPERATOR RANGE_OPERATOR SEMICOLON SEPARATOR STRING_LITERAL NUMBER MEMBER_ACCESS
+%token <stringValue> CONSTANT_DECLARATION VARIABLE_DECLARATION ARRAY_IDENTIFIER
+%token <stringValue> FUNCTION
+%token LOOP_TILL LOOP_FOR BREAK CONTINUE RETURN IF ELIF ELSE CASE 
+%token BLOCK_COMMENT LINE_COMMENT SEMICOLON SEPARATOR STRING_LITERAL NUMBER MEMBER_ACCESS KEYWORD COLLECTION
 
-%left '+' '-'
-%left '*' '/'
-%left '&' '|' '~' '^^'
-%left "==" "<" ">" "<=" ">="
-%left "&&" "||" "!"
+%token <stringValue> ARITHMETIC_OP_PLUS ARITHMETIC_OP_MINUS ARITHMETIC_OP_MULT ARITHMETIC_OP_DIV
+%token <stringValue> BITWISE_OP_AND BITWISE_OP_OR BITWISE_OP_NOT BITWISE_OP_XOR
+%token <stringValue> CONDITIONAL_OP_EQ CONDITIONAL_OP_LT CONDITIONAL_OP_GT CONDITIONAL_OP_LE CONDITIONAL_OP_GE
+%token <stringValue> LOGICAL_OP_AND LOGICAL_OP_OR LOGICAL_OP_NOT
+
+%type <declaration> declaration
+%type <stringValue> expression expr_arithmetic expr_bitwise expr_conditional expr_logical
+%type <stringValue> primary_expression
+%type <function> function_statement
+%type <stringValue> assignment statements statement loop_statement condition_statement
+%type <stringValue> else_if_list else_block block program
+
+%left LOGICAL_OP_OR
+%left LOGICAL_OP_AND
+%left BITWISE_OP_OR
+%left BITWISE_OP_XOR
+%left BITWISE_OP_AND
+%left CONDITIONAL_OP_EQ
+%left CONDITIONAL_OP_LT CONDITIONAL_OP_GT CONDITIONAL_OP_LE CONDITIONAL_OP_GE
+%left ARITHMETIC_OP_PLUS ARITHMETIC_OP_MINUS
+%left ARITHMETIC_OP_MULT ARITHMETIC_OP_DIV
+%right LOGICAL_OP_NOT BITWISE_OP_NOT
 
 %%
 
 program:
-    program statement '\n'
-    | /* NULL */
+    statements { $$ = $1; }
+    ;
+
+statements:
+    statements statement '\n' { $$ = $1; }
+    | /* empty */ { $$ = strdup(""); }
     ;
 
 statement:
-    declaration
-    | assignment
-    | loop
-    | function
-    | condition
-    | expression
+    declaration SEMICOLON { $$ = strdup(""); }
+    | assignment SEMICOLON { $$ = $1; }
+    | loop_statement { $$ = $1; }
+    | function_statement { $$ = strdup(""); }
+    | condition_statement { $$ = $1; }
+    | expression SEMICOLON { $$ = $1; }
     ;
 
 declaration:
-    CONSTANT_DECLARATION { printf("Constant Declaration: %s\n", $1); }
-    | VARIABLE_DECLARATION { printf("Variable Declaration: %s\n", $1); }
-    | ARRAY_IDENTIFIER { printf("Array Identifier: %s\n", $1); }
+    CONSTANT_DECLARATION { 
+        $$.name = $1; 
+        $$.type = "constant"; 
+        printf("Constant Declaration: %s\n", $1); 
+    }
+    | VARIABLE_DECLARATION { 
+        $$.name = $1; 
+        $$.type = "variable"; 
+        printf("Variable Declaration: %s\n", $1); 
+    }
+    | ARRAY_IDENTIFIER { 
+        $$.name = $1; 
+        $$.type = "array"; 
+        printf("Array Identifier: %s\n", $1); 
+    }
     ;
 
 assignment:
@@ -94,55 +138,117 @@ assignment:
         Symbol *sym = find_symbol($1);
         if (!sym) {
             yyerror("Undeclared identifier");
+            $$ = strdup("");
         } else {
-            printf("Assignment: %s = %d\n", $1, $3); 
+            $$ = strdup($1);
+            printf("Assignment: %s = %s\n", $1, $3); 
         }
     }
     ;
 
-loop:
-    LOOP_TILL { printf("Loop Till\n"); }
-    | LOOP_FOR { printf("Loop For\n"); }
-    | BREAK { printf("Break\n"); }
-    | CONTINUE { printf("Continue\n"); }
+loop_statement:
+    LOOP_TILL statement { $$ = strdup("loop_till"); }
+    | LOOP_FOR statement { $$ = strdup("loop_for"); }
+    | BREAK SEMICOLON { $$ = strdup("break"); }
+    | CONTINUE SEMICOLON { $$ = strdup("continue"); }
     ;
 
-function:
-    FUNCTION { 
+function_statement:
+    FUNCTION block { 
         if (find_symbol($1)) {
             yyerror("Duplicate function definition");
+            $$.name = "";
+            $$.returnType = "";
         } else {
             add_symbol($1);
             define_symbol($1);
+            $$.name = $1;
+            $$.returnType = "void";
             printf("Function: %s\n", $1); 
         }
     }
-    | RETURN { printf("Return\n"); }
+    | RETURN expression SEMICOLON { 
+        printf("Return\n");
+        $$.name = "return";
+        $$.returnType = "void";
+    }
     ;
 
-condition:
-    IF { printf("If\n"); }
-    | ELIF { printf("Elif\n"); }
-    | ELSE { printf("Else\n"); }
-    | CASE { printf("Case\n"); }
+condition_statement:
+    IF expression block else_if_list else_block { $$ = strdup("if"); }
+    ;
+
+else_if_list:
+    else_if_list ELIF expression block { $$ = strdup("elif"); }
+    | /* empty */ { $$ = strdup(""); }
+    ;
+
+else_block:
+    ELSE block { $$ = strdup("else"); }
+    | /* empty */ { $$ = strdup(""); }
+    ;
+
+block:
+    '{' statements '}' { $$ = $2; }
     ;
 
 expression:
-    INTEGER { $$ = $1; }
-    | FLOAT { $$ = $1; }
+    expr_arithmetic { $$ = $1; }
+    | expr_bitwise { $$ = $1; }
+    | expr_conditional { $$ = $1; }
+    | expr_logical { $$ = $1; }
+    | primary_expression { $$ = $1; }
+    ;
+
+primary_expression:
+    INTEGER { 
+        char buf[32]; 
+        sprintf(buf, "%d", $1); 
+        $$ = strdup(buf); 
+    }
+    | FLOAT { 
+        char buf[32]; 
+        sprintf(buf, "%f", $1); 
+        $$ = strdup(buf); 
+    }
     | IDENTIFIER { 
         Symbol *sym = find_symbol($1);
         if (!sym) {
             yyerror("Undeclared identifier");
+            $$ = strdup("");
         } else {
-            $$ = $1; 
+            $$ = strdup($1);
         }
     }
-    | expression ARITHMETIC_OPERATOR expression { $$ = $1 + $3; }
-    | expression BITWISE_OPERATOR expression { $$ = $1 & $3; }
-    | expression CONDITIONAL_OPERATOR expression { $$ = $1 == $3; }
-    | expression LOGICAL_OPERATOR expression { $$ = $1 && $3; }
     | '(' expression ')' { $$ = $2; }
+    ;
+
+expr_arithmetic:
+    expression ARITHMETIC_OP_PLUS expression { $$ = strdup($1); }
+    | expression ARITHMETIC_OP_MINUS expression { $$ = strdup($1); }
+    | expression ARITHMETIC_OP_MULT expression { $$ = strdup($1); }
+    | expression ARITHMETIC_OP_DIV expression { $$ = strdup($1); }
+    ;
+
+expr_bitwise:
+    expression BITWISE_OP_AND expression { $$ = strdup($1); }
+    | expression BITWISE_OP_OR expression { $$ = strdup($1); }
+    | expression BITWISE_OP_XOR expression { $$ = strdup($1); }
+    | BITWISE_OP_NOT expression { $$ = strdup($2); }
+    ;
+
+expr_conditional:
+    expression CONDITIONAL_OP_EQ expression { $$ = strdup($1); }
+    | expression CONDITIONAL_OP_LT expression { $$ = strdup($1); }
+    | expression CONDITIONAL_OP_GT expression { $$ = strdup($1); }
+    | expression CONDITIONAL_OP_LE expression { $$ = strdup($1); }
+    | expression CONDITIONAL_OP_GE expression { $$ = strdup($1); }
+    ;
+
+expr_logical:
+    expression LOGICAL_OP_AND expression { $$ = strdup($1); }
+    | expression LOGICAL_OP_OR expression { $$ = strdup($1); }
+    | LOGICAL_OP_NOT expression { $$ = strdup($2); }
     ;
 
 %%

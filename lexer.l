@@ -22,75 +22,193 @@ int line_num = 1;
 int char_num = 1;
 
 FILE *outp;
+
+// Helper function to create and return string values
+char* make_string(char* text) {
+    return strdup(text);
+}
 %}
 
 %%
 
-/* Keywords and Types */
-"int"|"float"|"bool"|"char"|"string" { keywords++; fprintf(outp, "KEYWORD: %s\n", yytext); return KEYWORD; }
+"int"|"float"|"bool"|"char"|"string" { 
+    keywords++; 
+    fprintf(outp, "KEYWORD: %s\n", yytext); 
+    yylval.stringValue = make_string(yytext);
+    return KEYWORD; 
+}
 
-/* Collection Definition */
-"col"[ \t]+[A-Z][a-zA-Z0-9_]*[ \t]*[{] { collections++; keywords++; fprintf(outp, "COLLECTION: %s\n", yytext); return COLLECTION; }
+"col"[ \t]+[A-Z][a-zA-Z0-9_]*[ \t]*[{] { 
+    collections++; 
+    keywords++; 
+    fprintf(outp, "COLLECTION: %s\n", yytext);
+    yylval.stringValue = make_string(yytext);
+    return COLLECTION; 
+}
 
-/* Variable and Constant Declarations */
-"__"[a-zA-Z][a-zA-Z0-9_]*"%"[a-zA-Z]+ { constants++; declarations++; fprintf(outp, "CONSTANT DECLARATION: %s\n", yytext); return CONSTANT_DECLARATION; }
-"_"[a-zA-Z][a-zA-Z0-9_]*"%"[a-zA-Z]+ { identifiers++; declarations++; fprintf(outp, "VARIABLE DECLARATION: %s\n", yytext); return VARIABLE_DECLARATION; }
-"_"[a-zA-Z][a-zA-Z0-9_]*"%"[a-zA-Z]+"\[\]" { identifiers++; arrays++; fprintf(outp, "ARRAY_IDENTIFIER: %s\n", yytext); return ARRAY_IDENTIFIER; }
+"__"[a-zA-Z][a-zA-Z0-9_]*"%"[a-zA-Z]+ { 
+    constants++; 
+    declarations++; 
+    fprintf(outp, "CONSTANT DECLARATION: %s\n", yytext);
+    yylval.stringValue = make_string(yytext);
+    return CONSTANT_DECLARATION; 
+}
 
-/* Loops */
-"loop"[ \t]+"till" { loops++; keywords++; fprintf(outp, "LOOP_TILL: %s\n", yytext); return LOOP_TILL; }
-"loop"[ \t]+"_"[a-zA-Z][a-zA-Z0-9_]*"%"[a-zA-Z]+[ \t]+"for" { loops++; keywords++; declarations++; fprintf(outp, "LOOP_FOR: %s\n", yytext); return LOOP_FOR; }
-"loop"[ \t]+[a-zA-Z][a-zA-Z0-9_]*[ \t]+"for" { loops++; keywords++; identifiers++; fprintf(outp, "LOOP_FOR: %s\n", yytext); return LOOP_FOR; }
-"break" { keywords++; fprintf(outp, "BREAK\n"); return BREAK; }
-"continue" { keywords++; fprintf(outp, "CONTINUE\n"); return CONTINUE; }
+"_"[a-zA-Z][a-zA-Z0-9_]*"%"[a-zA-Z]+ { 
+    identifiers++; 
+    declarations++; 
+    fprintf(outp, "VARIABLE DECLARATION: %s\n", yytext);
+    yylval.stringValue = make_string(yytext);
+    return VARIABLE_DECLARATION; 
+}
 
-/* Functions */
-"shap"[ \t]+[a-zA-Z][a-zA-Z0-9_]* { functions++; keywords++; fprintf(outp, "FUNCTION: %s\n", yytext); return FUNCTION; }
-"ret" { keywords++; fprintf(outp, "RETURN\n"); return RETURN; }
+"_"[a-zA-Z][a-zA-Z0-9_]*"%"[a-zA-Z]+"\[\]" { 
+    identifiers++; 
+    arrays++; 
+    fprintf(outp, "ARRAY_IDENTIFIER: %s\n", yytext);
+    yylval.stringValue = make_string(yytext);
+    return ARRAY_IDENTIFIER; 
+}
 
-/* Conditions */
-"if"[ \t]*"[" { conditions++; keywords++; fprintf(outp, "IF\n"); return IF; }
-"elif"[ \t]*"[" { conditions++; keywords++; fprintf(outp, "ELIF\n"); return ELIF; }
-"else" { conditions++; keywords++; fprintf(outp, "ELSE\n"); return ELSE; }
+"loop"[ \t]+"till" { 
+    loops++; 
+    keywords++; 
+    fprintf(outp, "LOOP_TILL: %s\n", yytext);
+    return LOOP_TILL; 
+}
 
-/* Case Statement */
-"case"[ \t]*"[" { conditions++; keywords++; fprintf(outp, "CASE\n"); return CASE; }
+"loop"[ \t]+"for" { 
+    loops++; 
+    keywords++; 
+    fprintf(outp, "LOOP_FOR: %s\n", yytext);
+    return LOOP_FOR; 
+}
 
-/* Comments */
-"##"[^#]*"##" { block_comments++; fprintf(outp, "BLOCK_COMMENT\n"); return BLOCK_COMMENT; }
-"#"[^\n]* { line_comments++; fprintf(outp, "LINE_COMMENT\n"); return LINE_COMMENT; }
+"break" { 
+    keywords++; 
+    fprintf(outp, "BREAK\n"); 
+    return BREAK; 
+}
 
-/* Operators */
-"=="|"<="|">="|"!="|"<"|">" { operators++; fprintf(outp, "CONDITIONAL_OPERATOR: %s\n", yytext); return CONDITIONAL_OPERATOR; }
-"&&"|"||"|"!" { operators++; fprintf(outp, "LOGICAL_OPERATOR: %s\n", yytext); return LOGICAL_OPERATOR; }
-"&"|"|"|"~"|"^^" { operators++; fprintf(outp, "BITWISE_OPERATOR: %s\n", yytext); return BITWISE_OPERATOR; }
-"+"|"-"|"*"|"/"|"%" { operators++; fprintf(outp, "ARITHMETIC_OPERATOR: %s\n", yytext); return ARITHMETIC_OPERATOR; }
+"continue" { 
+    keywords++; 
+    fprintf(outp, "CONTINUE\n"); 
+    return CONTINUE; 
+}
 
-/* Range Operator */
-".." { operators++; fprintf(outp, "RANGE_OPERATOR\n"); return RANGE_OPERATOR; }
+"shap"[ \t]+[a-zA-Z][a-zA-Z0-9_]* { 
+    functions++; 
+    keywords++; 
+    fprintf(outp, "FUNCTION: %s\n", yytext);
+    yylval.stringValue = make_string(yytext);
+    return FUNCTION; 
+}
 
-/* Separators */
-";" { semicolons++; fprintf(outp, "SEMICOLON\n"); return SEMICOLON; }
-[{}(),\[\]] { fprintf(outp, "SEPARATOR: %s\n", yytext); return SEPARATOR; }
+"ret" { 
+    keywords++; 
+    fprintf(outp, "RETURN\n"); 
+    return RETURN; 
+}
 
-/* String Literals */
-\"[^\"]*\" { fprintf(outp, "STRING_LITERAL: %s\n", yytext); return STRING_LITERAL; }
+"if"[ \t]*"[" { 
+    conditions++; 
+    keywords++; 
+    fprintf(outp, "IF\n"); 
+    return IF; 
+}
 
-/* Numbers */
-[0-9]+(\.[0-9]+)? { fprintf(outp, "NUMBER: %s\n", yytext); return NUMBER; }
+"elif"[ \t]*"[" { 
+    conditions++; 
+    keywords++; 
+    fprintf(outp, "ELIF\n"); 
+    return ELIF; 
+}
 
-/* Member Access */
-"."[a-zA-Z][a-zA-Z0-9_]* { fprintf(outp, "MEMBER_ACCESS: %s\n", yytext); return MEMBER_ACCESS; }
+"else" { 
+    conditions++; 
+    keywords++; 
+    fprintf(outp, "ELSE\n"); 
+    return ELSE; 
+}
 
-/* Identifiers */
-[a-zA-Z][a-zA-Z0-9_]* { fprintf(outp, "IDENTIFIER: %s\n", yytext); return IDENTIFIER; }
+"case"[ \t]*"[" { 
+    conditions++; 
+    keywords++; 
+    fprintf(outp, "CASE\n"); 
+    return CASE; 
+}
 
-/* Whitespace */
+"##"[^#]*"##" { 
+    block_comments++; 
+    fprintf(outp, "BLOCK_COMMENT\n"); 
+    return BLOCK_COMMENT; 
+}
+
+"#"[^\n]* { 
+    line_comments++; 
+    fprintf(outp, "LINE_COMMENT\n"); 
+    return LINE_COMMENT; 
+}
+
+"+" { operators++; fprintf(outp, "ARITHMETIC_OP_PLUS\n"); return ARITHMETIC_OP_PLUS; }
+"-" { operators++; fprintf(outp, "ARITHMETIC_OP_MINUS\n"); return ARITHMETIC_OP_MINUS; }
+"*" { operators++; fprintf(outp, "ARITHMETIC_OP_MULT\n"); return ARITHMETIC_OP_MULT; }
+"/" { operators++; fprintf(outp, "ARITHMETIC_OP_DIV\n"); return ARITHMETIC_OP_DIV; }
+
+"&" { operators++; fprintf(outp, "BITWISE_OP_AND\n"); return BITWISE_OP_AND; }
+"|" { operators++; fprintf(outp, "BITWISE_OP_OR\n"); return BITWISE_OP_OR; }
+"~" { operators++; fprintf(outp, "BITWISE_OP_NOT\n"); return BITWISE_OP_NOT; }
+"^^" { operators++; fprintf(outp, "BITWISE_OP_XOR\n"); return BITWISE_OP_XOR; }
+
+"==" { operators++; fprintf(outp, "CONDITIONAL_OP_EQ\n"); return CONDITIONAL_OP_EQ; }
+"<" { operators++; fprintf(outp, "CONDITIONAL_OP_LT\n"); return CONDITIONAL_OP_LT; }
+">" { operators++; fprintf(outp, "CONDITIONAL_OP_GT\n"); return CONDITIONAL_OP_GT; }
+"<=" { operators++; fprintf(outp, "CONDITIONAL_OP_LE\n"); return CONDITIONAL_OP_LE; }
+">=" { operators++; fprintf(outp, "CONDITIONAL_OP_GE\n"); return CONDITIONAL_OP_GE; }
+
+"&&" { operators++; fprintf(outp, "LOGICAL_OP_AND\n"); return LOGICAL_OP_AND; }
+"||" { operators++; fprintf(outp, "LOGICAL_OP_OR\n"); return LOGICAL_OP_OR; }
+"!" { operators++; fprintf(outp, "LOGICAL_OP_NOT\n"); return LOGICAL_OP_NOT; }
+
+";" { 
+    semicolons++; 
+    fprintf(outp, "SEMICOLON\n"); 
+    return SEMICOLON; 
+}
+
+[{}(),\[\]] { 
+    fprintf(outp, "SEPARATOR: %s\n", yytext); 
+    return yytext[0];  // Return the character itself for single-char tokens
+}
+
+\"[^\"]*\" { 
+    fprintf(outp, "STRING_LITERAL: %s\n", yytext);
+    yylval.stringValue = make_string(yytext);
+    return STRING_LITERAL; 
+}
+
+[0-9]+ { 
+    fprintf(outp, "INTEGER: %s\n", yytext);
+    yylval.intValue = atoi(yytext);
+    return INTEGER; 
+}
+
+[0-9]+\.[0-9]+ { 
+    fprintf(outp, "FLOAT: %s\n", yytext);
+    yylval.floatValue = atof(yytext);
+    return FLOAT; 
+}
+
+[a-zA-Z][a-zA-Z0-9_]* { 
+    fprintf(outp, "IDENTIFIER: %s\n", yytext);
+    yylval.stringValue = make_string(yytext);
+    return IDENTIFIER; 
+}
+
 [ \t]+ { char_num += yyleng; }
-\n { line_num++; char_num = 1; }
+\n { line_num++; char_num = 1; return '\n'; }
 
-/* Catch any other character */
-. { fprintf(outp, "UNKNOWN TOKEN: %s\n", yytext); return UNKNOWN; }
+. { fprintf(outp, "UNKNOWN TOKEN: %s\n", yytext); }
 
 %%
 
