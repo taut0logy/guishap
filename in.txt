@@ -1,21 +1,35 @@
-# Sample Guishap Program
+# Sample Guishap Program. This is a line comment
 ## 
 This is a demonstration of the Guishap programming language
-featuring all major language constructs
+featuring all major language constructs. this is a block comment
 ##
 
 # Define a collection
+# collection members are separated by commas, and must contain data type. these can be variables, constants or arrays of variables or constants
 col Student {
     _name%string,
     _age%int,
     _grades%float[]
 };
 
-# Constants declaration
+# Variables declaration, these are mutable values. may or may not be initialized at declaration, and start with an underscore
+# The data type is separated by a % symbol
+# The data type can be a primitive type, a collection, or an array of primitive types or collections
+# The data type can be followed by a default value, which is optional
+# The assignment operator is a colon
+_name%string:"";
+
+# Constants declaration, these are immutable values. must be initialized at declaration, and start with two underscores
 __PI%float:3.14159;
 __MAX_STUDENTS%int:100;
 
 # Function
+# Functions are defined using the shap keyword followed by the function name and parameters in parentheses
+# The return type is specified after the closing parenthesis seperated by a > symbol, followed by the function body in curly braces
+# The ret statement is used to return a value from the function
+# The function body can contain variable declarations, assignments, conditional statements, loops, and function calls
+# The function body can also contain mathematical and bitwise operations
+
 shap calcAvg (_grades%float[])>float {
     _sum%float:0.0;
     _count%int:0;
@@ -29,17 +43,29 @@ shap calcAvg (_grades%float[])>float {
 }
 
 # Function and case
+# The case statement is used to define a switch-case statement
+# The case statement is followed by an expression in square brackets
+# The case statement can have multiple cases, each followed by a colon
+# The case statement can have a default case, which is an empty square brackets
+# The case statement can have a break statement to exit the case block
+# The case statement can have a continue statement to skip the rest of the current iteration
+
 shap getGrade (_score%float)>string {
     case [score] {
         [90.0]: ret "A";
         [80.0]: ret "B";
         [70.0]: ret "C";
         [60.0]: ret "D";
-        []: ret "F";  # Default case
+        []: ret "F";
     }
 }
 
 # Main function
+# The main function is the entry point of the program
+# The main function must be defined in the program
+# The main function does not take any parameters
+# The main function returns an integer value
+
 shap main ()>int {
     # Variable declarations
     _student%Student:{
