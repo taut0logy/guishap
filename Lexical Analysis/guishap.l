@@ -22,17 +22,14 @@ FILE *outp;
 
 
 %%
-    /* Keywords and Types */
 "int"|"float"|"bool"|"char"|"string" { keywords++; fprintf(outp, "KEYWORD: %s\n", yytext); }
 
-    /* Collection Definition */
 "col"[ \t]+[A-Z][a-zA-Z0-9_]*[ \t]*[{] { 
     collections++; 
     keywords++;
     fprintf(outp, "COLLECTION: %s\n", yytext);
 }
 
-    /* Variable and Constant Declarations */
 "__"[a-zA-Z][a-zA-Z0-9_]*"%"[a-zA-Z]+    { constants++; declarations++; fprintf(outp, "CONSTANT DECLARATION: %s\n", yytext); }
 "_"[a-zA-Z][a-zA-Z0-9_]*"%"[a-zA-Z]+     { identifiers++; declarations++; fprintf(outp, "VARIABLE DECLARATION: %s\n", yytext); }
 "_"[a-zA-Z][a-zA-Z0-9_]*"%"[a-zA-Z]+"\[\]" {
@@ -41,14 +38,12 @@ FILE *outp;
     fprintf(outp, "ARRAY_IDENTIFIER: %s\n", yytext); 
 }
 
-    /* Loops */
 "loop"[ \t]+"till"    { loops++; keywords++; fprintf(outp, "LOOP_TILL: %s\n", yytext); }
 "loop"[ \t]+"_"[a-zA-Z][a-zA-Z0-9_]*"%"[a-zA-Z]+[ \t]+"for"     { loops++; keywords++; declarations; fprintf(outp, "LOOP_FOR: %s\n", yytext); }
 "loop"[ \t]+[a-zA-Z][a-zA-Z0-9_]*[ \t]+"for"     { loops++; keywords++; identifiers; fprintf(outp, "LOOP_FOR: %s\n", yytext); }
 "break"               { keywords++; fprintf(outp, "BREAK\n"); }
 "continue"            { keywords++; fprintf(outp, "CONTINUE\n"); }
 
-    /* Functions */
 "shap"[ \t]+[a-zA-Z][a-zA-Z0-9_]*  {
     functions++; 
     keywords++; 
@@ -56,45 +51,33 @@ FILE *outp;
 }
 "ret"                { keywords++; fprintf(outp, "RETURN\n"); }
 
-    /* Conditions */
 "if"[ \t]*"["        { conditions++; keywords++; fprintf(outp, "IF\n"); }
 "elif"[ \t]*"["      { conditions++; keywords++; fprintf(outp, "ELIF\n"); }
 "else"               { conditions++; keywords++; fprintf(outp, "ELSE\n"); }
 
-    /* Case Statement */
 "case"[ \t]*"["      { conditions++; keywords++; fprintf(outp, "CASE\n"); }
 
-    /* Comments */
 "##"[^#]*"##"        { block_comments++; fprintf(outp, "BLOCK_COMMENT\n"); }
 "#"[^\n]*            { line_comments++; fprintf(outp, "LINE_COMMENT\n"); }
 
-    /* Operators */
 ":"|">="|"<="|"!="|"=="|">"|"<"|"+" { operators++; fprintf(outp, "OPERATOR: %s\n", yytext); }
 "-"|"*"|"/"|"%"|"^"|"&"|"|"|"~"     { operators++; fprintf(outp, "OPERATOR: %s\n", yytext); }
 
-    /* Range Operator */
 ".."                 { operators++; fprintf(outp, "RANGE_OPERATOR\n"); }
 
-    /* Separators */
 ";"                  { semicolons++; fprintf(outp, "SEMICOLON\n"); }
 [{}(),\[\]]         { fprintf(outp, "SEPARATOR: %s\n", yytext); }
 
-    /* String Literals */
 \"[^\"]*\"          { fprintf(outp, "STRING_LITERAL: %s\n", yytext); }
 
-    /* Numbers */
 [0-9]+(\.[0-9]+)?   { fprintf(outp, "NUMBER: %s\n", yytext); }
 
-    /* Member Access */
 "."[a-zA-Z][a-zA-Z0-9_]* { fprintf(outp, "MEMBER_ACCESS: %s\n", yytext); }
 
-    /* Identifiers */
 [a-zA-Z][a-zA-Z0-9_]* { fprintf(outp, "IDENTIFIER: %s\n", yytext); }
 
-    /* Whitespace */
 [ \t\n]+            { /* Ignore whitespace */ }
 
-    /* Catch any other character */
 .    { fprintf(outp, "UNKNOWN TOKEN: %s\n", yytext); }
 
 %%

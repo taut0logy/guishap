@@ -8,18 +8,21 @@ int yylex(void);
 
 extern int line_num;
 extern int char_num;
+extern char *yytext;
 
 typedef struct Symbol {
     char *name;
+    char *data_type;
     int defined;
     struct Symbol *next;
 } Symbol;
 
 Symbol *symbol_table = NULL;
 
-void add_symbol(char *name) {
+void add_symbol(char *name, char *data_type) {
     Symbol *sym = (Symbol *)malloc(sizeof(Symbol));
     sym->name = strdup(name);
+    sym->data_type = strdup(data_type);
     sym->defined = 0;
     sym->next = symbol_table;
     symbol_table = sym;
@@ -113,35 +116,55 @@ statement:
     | function_statement { $$ = strdup(""); }
     | condition_statement { $$ = $1; }
     | expression SEMICOLON { $$ = $1; }
+    | BLOCK_COMMENT { $$ = strdup(""); }
+    | LINE_COMMENT { $$ = strdup(""); }
     ;
 
 declaration:
-    CONSTANT_DECLARATION { 
+    CONSTANT_DECLARATION ':' expression { 
         $$.name = $1; 
         $$.type = "constant"; 
-        printf("Constant Declaration: %s\n", $1); 
+        printf("Constant Declaration: %s = %s\n", $1, $3); 
+        add_symbol($1, "constant");
     }
     | VARIABLE_DECLARATION { 
         $$.name = $1; 
         $$.type = "variable"; 
         printf("Variable Declaration: %s\n", $1); 
+        add_symbol($1, "variable");
+    }
+    | VARIABLE_DECLARATION ':' expression { 
+        $$.name = $1; 
+        $$.type = "variable"; 
+        printf("Variable Declaration with Initialization: %s = %s\n", $1, $3); 
+        add_symbol($1, "variable");
     }
     | ARRAY_IDENTIFIER { 
         $$.name = $1; 
         $$.type = "array"; 
         printf("Array Identifier: %s\n", $1); 
+        add_symbol($1, "array");
     }
     ;
 
 assignment:
-    IDENTIFIER '=' expression { 
+    IDENTIFIER ':' expression { 
         Symbol *sym = find_symbol($1);
         if (!sym) {
             yyerror("Undeclared identifier");
             $$ = strdup("");
         } else {
-            $$ = strdup($1);
-            printf("Assignment: %s = %s\n", $1, $3); 
+            if ((strcmp(sym->data_type, "int") == 0 || strcmp(sym->data_type, "float") == 0) && 
+                (strcmp($3, "int") == 0 || strcmp($3, "float") == 0)) {
+                $$ = strdup($1);
+                printf("Assignment: %s = %s\n", $1, $3); 
+            } else if (strcmp(sym->data_type, $3) != 0) {
+                yyerror("Type mismatch in assignment");
+                $$ = strdup("");
+            } else {
+                $$ = strdup($1);
+                printf("Assignment: %s = %s\n", $1, $3); 
+            }
         }
     }
     ;
@@ -160,7 +183,7 @@ function_statement:
             $$.name = "";
             $$.returnType = "";
         } else {
-            add_symbol($1);
+            add_symbol($1, "function");
             define_symbol($1);
             $$.name = $1;
             $$.returnType = "void";
@@ -254,7 +277,7 @@ expr_logical:
 %%
 
 void yyerror(const char *s) {
-    fprintf(stderr, "Error: %s at line %d, character %d\n", s, line_num, char_num);
+    fprintf(stderr, "Error: %s at line %d, character %d, token: %s\n", s, line_num, char_num, yytext);
 }
 
 int main(void) {
