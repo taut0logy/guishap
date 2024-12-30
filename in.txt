@@ -1,23 +1,31 @@
-# Sample Guishap Program. This is a line comment
-## 
+# Sample Guishap Program.
+##
 This is a demonstration of the Guishap programming language
-featuring all major language constructs. this is a block comment
+featuring all major language constructs.
 ##
 
+# This is a line comment
+
+##
+Variables declaration, these are mutable values. may or may not be initialized at declaration, and start with an underscore
+The data type is separated by a % symbol
+The data type can be a primitive type, a collection, or an array of primitive types or collections
+The data type can be followed by a default value, which is optional
+The assignment operator is a colon
+##
+
+_name%string:"Hello, World!";
+
 # Define a collection
+# collections are defined using the col keyword followed by the collection name and members in curly braces
 # collection members are separated by commas, and must contain data type. these can be variables, constants or arrays of variables or constants
+# collection memebers can be of any data type, including primitive types, collections, and arrays
+# collection members cannot have initializers
 col Student {
     _name%string,
     _age%int,
     _grades%float[]
 };
-
-# Variables declaration, these are mutable values. may or may not be initialized at declaration, and start with an underscore
-# The data type is separated by a % symbol
-# The data type can be a primitive type, a collection, or an array of primitive types or collections
-# The data type can be followed by a default value, which is optional
-# The assignment operator is a colon
-_name%string:"";
 
 # Constants declaration, these are immutable values. must be initialized at declaration, and start with two underscores
 __PI%float:3.14159;
@@ -27,25 +35,26 @@ __MAX_STUDENTS%int:100;
 # Functions are defined using the shap keyword followed by the function name and parameters in parentheses
 # The return type is specified after the closing parenthesis seperated by a > symbol, followed by the function body in curly braces
 # The ret statement is used to return a value from the function
-# The function body can contain variable declarations, assignments, conditional statements, loops, and function calls
+# The function body can contain variable and constant declarations, assignments, conditional statements, loops, and function calls
 # The function body can also contain mathematical and bitwise operations
 
 shap calcAvg (_grades%float[])>float {
     _sum%float:0.0;
     _count%int:0;
     
-    loop count for [0..2..1] {
-        sum:sum+grades[count];
-        count:count+1;
+    loop _i%int for [0..len(_grades)..1] {
+        _sum:_sum + _grades[_i];
+        _count:_count + 1;
     }
     
-    ret sum/count;
+    ret _sum / _count;
 }
 
 # Function and case
 # The case statement is used to define a switch-case statement
 # The case statement is followed by an expression in square brackets
 # The case statement can have multiple cases, each followed by a colon
+# The case statement can have a default case, which is an empty square brackets
 # The case statement can have a default case, which is an empty square brackets
 # The case statement can have a break statement to exit the case block
 # The case statement can have a continue statement to skip the rest of the current iteration
@@ -69,31 +78,30 @@ shap getGrade (_score%float)>string {
 shap main ()>int {
     # Variable declarations
     _student%Student:{
-        name:"John Doe",
-        age:20,
-        grades:[85.5, 90.0, 88.5]
+        _name:"John Doe",
+        _age:20,
+        _grades:[85.5, 90.0, 88.5]
     };
     
     _average%float:0.0;
     _grade%string:"";
     
-    average:calcAvg(student.grades);
+    _average:calcAvg(_student._grades);
     
-    grade:getGrade(average);
+    _grade:getGrade(_average);
     
     # Conditional statement
-    if [average >= 90.0] {
+    if [_average >= 90.0] {
         # Print high achiever message
         _message%string:"Excellent performance!";
-        print(message);
-    } elif [average >= 80.0] {
+        print(_message);
+    } elif [_average >= 80.0] {
         _message%string:"Good job!";
-        print(message);
+        print(_message);
     } else {
         _message%string:"Keep working hard!";
-        print(message);
+        print(_message);
     }
-    
     
     # Loop example
     _scores%float[]:[78.5, 82.0, 91.5, 88.0, 95.0];
@@ -101,17 +109,18 @@ shap main ()>int {
     
     # Using till loop
     _i%int:0;
-    loop till [i < 5] {
-        sum: sum + scores[i];
-        if [scores[i] > 90.0] {
+    loop till [_i < 5] {
+        _sum: _sum + _scores[_i];
+        if [_scores[_i] > 90.0] {
+            _i: _i + 1;
             continue;  # Skip the rest of this iteration
         }
-        i: i + 1;
+        _i: _i + 1;
     }
     
     # Using for loop with array
     loop _i%int for [0..4..1] {
-        if [scores[i] < 80.0] {
+        if (_scores[_i] < 80.0) {
             break;  # Exit the loop
         }
     }
@@ -119,11 +128,13 @@ shap main ()>int {
     # Bitwise operations example
     _flags%int:5;
     _mask%int:3;
-    _result%int:flags & mask;
+    _result%int:_flags & _mask;
     
     # Mathematical operations
-    _circle_area%float:PI * radius ^ 2;
+    _radius%float:5.0;
+    _circle_area%float:__PI * _radius * _radius;
     _remainder%int:17 % 5;
     
     ret 0;
 }
+
