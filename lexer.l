@@ -81,10 +81,12 @@ char* float_to_string(float value) {
 "##"            { 
     block_comments++; 
     update_char_pos();
+    printf("Block Comment start at line %d\n", line_num);
     BEGIN(BLOCK_COMMENT); 
 }
 <BLOCK_COMMENT>"##" { 
     update_char_pos();
+    printf("Block Comment end at line %d\n", line_num);
     BEGIN(INITIAL); 
 }
 <BLOCK_COMMENT>\n   { handle_newline(); }
@@ -93,6 +95,7 @@ char* float_to_string(float value) {
 "#"[^\n]*       { 
     line_comments++; 
     update_char_pos();
+    printf("Line Comment at line %d: %s\n", line_num, yytext + 1);  // Skip the '#' character
     return LINE_COMMENT; 
 }
 
@@ -117,13 +120,13 @@ char* float_to_string(float value) {
     update_char_pos();
     functions++;
     keywords++;
-    char* name = strdup(yytext + 5);
+    char* name = strdup(yytext + 5);  // Skip "shap "
+    while (isspace(*name)) name++;     // Skip leading spaces
+    
     name[strlen(name)-1] = '\0';
-
     while (isspace(name[strlen(name)-1])) {
         name[strlen(name)-1] = '\0';
     }
-    while (isspace(*name)) name++;
     
     printf("Function Definition start at line %d: %s\n", line_num, name);
     yylval.stringValue = name;
@@ -132,12 +135,12 @@ char* float_to_string(float value) {
 
 ">"[ \t]*[a-zA-Z][a-zA-Z0-9_]*[ \t]* {
     update_char_pos();
-    char* type = strdup(yytext + 1);
-
+    char* type = strdup(yytext + 1);  // Skip ">"
+    while (isspace(*type)) type++;
+    
     while (isspace(type[strlen(type)-1])) {
         type[strlen(type)-1] = '\0';
     }
-    while (isspace(*type)) type++;
     
     printf("Function return type at line %d: %s\n", line_num, type);
     yylval.stringValue = type;

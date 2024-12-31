@@ -46,6 +46,7 @@ void update_token_pos() {
 typedef struct Symbol {
     char *name;
     char *data_type;
+    char *value;
     int defined;
     struct Symbol *next;
 } Symbol;
@@ -117,7 +118,37 @@ char* get_array_base_type(const char* var_decl) {
     return type;
 }
 
-// Modify type compatibility check to handle arrays and implicit numeric conversions
+// Add function to get type string from value
+char* get_type_string(const char* value) {
+    if (!value || value[0] == '\0') return NULL;
+    
+    // Check if it's a string literal (starts and ends with quotes)
+    if (value[0] == '"') {
+        int len = strlen(value);
+        if (len >= 2 && value[len-1] == '"') {
+            return "string";
+        }
+        return NULL;  // Invalid string literal
+    }
+    
+    // Check if it's a float (contains a decimal point)
+    if (strchr(value, '.') != NULL) {
+        // Verify it's a valid float
+        char* endptr;
+        strtof(value, &endptr);
+        if (*endptr == '\0') return "float";
+        return NULL;
+    }
+    
+    // Try to parse as int
+    char* endptr;
+    strtol(value, &endptr, 10);
+    if (*endptr == '\0') return "int";
+    
+    return NULL;
+}
+
+// Modify type compatibility check to handle string literals properly
 int check_type_compatibility(const char* var_type, const char* value_type) {
     if (!var_type || !value_type) return 0;
     
@@ -149,20 +180,15 @@ int check_type_compatibility(const char* var_type, const char* value_type) {
     return 0;
 }
 
-// Add function to get type string from value
-char* get_type_string(const char* value) {
-    // Check if it's a string literal
-    if (value[0] == '"') return "string";
-    
-    // Check if it's a float (contains a decimal point)
-    if (strchr(value, '.') != NULL) return "float";
-    
-    // Try to parse as int
-    char* endptr;
-    strtol(value, &endptr, 10);
-    if (*endptr == '\0') return "int";
-    
-    return NULL;
+// Add this function to store numeric values in symbol table
+void add_symbol_with_value(char *name, char *data_type, char *value) {
+    Symbol *sym = (Symbol *)malloc(sizeof(Symbol));
+    sym->name = strdup(name);
+    sym->data_type = strdup(data_type);
+    sym->value = strdup(value);
+    sym->defined = 0;
+    sym->next = symbol_table;
+    symbol_table = sym;
 }
 
 %}
@@ -187,13 +213,13 @@ char* get_type_string(const char* value) {
     } function;
 }
 
-%token <stringValue> IDENTIFIER
 %token <intValue> INTEGER
 %token <floatValue> FLOAT
+%token <stringValue> STRING_LITERAL IDENTIFIER
 %token <stringValue> CONSTANT_DECLARATION VARIABLE_DECLARATION ARRAY_IDENTIFIER
 %token <stringValue> FUNCTION
 %token LOOP_TILL LOOP_FOR BREAK CONTINUE RETURN IF ELIF ELSE CASE 
-%token BLOCK_COMMENT LINE_COMMENT SEMICOLON STRING_LITERAL
+%token BLOCK_COMMENT LINE_COMMENT SEMICOLON
 
 %token <stringValue> ARITHMETIC_OP_PLUS ARITHMETIC_OP_MINUS ARITHMETIC_OP_MULT ARITHMETIC_OP_DIV
 %token <stringValue> BITWISE_OP_AND BITWISE_OP_OR BITWISE_OP_NOT BITWISE_OP_XOR
@@ -212,6 +238,7 @@ char* get_type_string(const char* value) {
 %type <stringValue> ws_or_newlines collection_declaration
 %type <stringValue> case_list case_item
 %type <stringValue> parameter_list parameter_declarations
+
 
 %nonassoc IF
 %nonassoc THEN
@@ -270,8 +297,14 @@ statement:
     declaration SEMICOLON    { $$ = strdup(""); }
     | assignment SEMICOLON   { $$ = $1; }
     | expression SEMICOLON   { $$ = $1; }
-    | BLOCK_COMMENT         { $$ = strdup(""); }
-    | LINE_COMMENT          { $$ = strdup(""); }
+    | BLOCK_COMMENT         { 
+        printf("Block Comment processed in statement\n");
+        $$ = strdup(""); 
+    }
+    | LINE_COMMENT          { 
+        printf("Line Comment processed in statement\n");
+        $$ = strdup(""); 
+    }
     | BREAK SEMICOLON       { $$ = strdup("break"); }
     | CONTINUE SEMICOLON    { $$ = strdup("continue"); }
     | RETURN expression SEMICOLON { $$ = strdup("return"); }
@@ -329,7 +362,31 @@ block:
     ;
 
 declaration:
-    CONSTANT_DECLARATION ASSIGN_OP expression { 
+    VARIABLE_DECLARATION ASSIGN_OP expression { 
+        initializations++;
+        printf("Operation: Variable Declaration with Initialization at line %d\n", line_num);
+        $$.name = $1; 
+        $$.type = "variable";
+        char *var_type = get_variable_type($1);
+        char *expr_type = get_type_string($3);
+        
+        if (!expr_type) {
+            char error_msg[100];
+            sprintf(error_msg, "Invalid value type for initialization");
+            yyerror(error_msg);
+            $$.name = "";
+        }
+        else if (!check_type_compatibility(var_type, expr_type)) {
+            char error_msg[100];
+            sprintf(error_msg, "Type mismatch in initialization: expected %s, got %s", var_type, expr_type);
+            yyerror(error_msg);
+            $$.name = "";
+        } else {
+            printf("Variable Declaration with Initialization: %s of type %s with value %s\n", $1, var_type, $3); 
+            add_symbol_with_value($1, var_type, $3);
+        }
+    }
+    | CONSTANT_DECLARATION ASSIGN_OP expression { 
         initializations++;
         printf("Operation: Constant Declaration and Initialization at line %d\n", line_num);
         $$.name = $1; 
@@ -350,7 +407,7 @@ declaration:
             $$.name = "";
         } else {
             printf("Constant Declaration: %s of type %s with value %s\n", $1, var_type, $3); 
-            add_symbol($1, var_type);
+            add_symbol_with_value($1, var_type, $3);
         }
     }
     | CONSTANT_DECLARATION { 
@@ -365,24 +422,6 @@ declaration:
         char *var_type = get_variable_type($1);
         printf("Variable Declaration: %s of type %s\n", $1, var_type); 
         add_symbol($1, var_type);
-    }
-    | VARIABLE_DECLARATION ASSIGN_OP expression { 
-        initializations++;
-        printf("Operation: Variable Declaration with Initialization at line %d\n", line_num);
-        $$.name = $1; 
-        $$.type = "variable"; 
-        char *var_type = get_variable_type($1);
-        char *expr_type = $3;
-        
-        if (!check_type_compatibility(var_type, expr_type)) {
-            char error_msg[100];
-            sprintf(error_msg, "Type mismatch in initialization: expected %s, got %s", var_type, expr_type);
-            yyerror(error_msg);
-            $$.name = "";
-        } else {
-            printf("Variable Declaration with Initialization: %s of type %s\n", $1, var_type); 
-            add_symbol($1, var_type);
-        }
     }
     | ARRAY_IDENTIFIER { 
         $$.name = $1; 
@@ -483,11 +522,87 @@ parameter_list:
     ;
 
 parameter_declarations:
-    declaration                      { $$ = $1.name; }
-    | parameter_declarations ',' declaration {
-        char *result = malloc(strlen($1) + strlen($3.name) + 2);
-        sprintf(result, "%s,%s", $1, $3.name);
+    VARIABLE_DECLARATION                      { 
+        $$ = $1;
+        char *var_type = get_variable_type($1);
+        printf("Parameter Variable Declaration: %s of type %s\n", $1, var_type);
+        add_symbol($1, var_type);
+    }
+    | ARRAY_DECLARATION                       { 
+        $$ = $1;
+        char *base_type = get_array_base_type($1);
+        char type_with_array[100];
+        sprintf(type_with_array, "%s[]", base_type);
+        printf("Parameter Array Declaration: %s of type %s\n", $1, type_with_array);
+        add_symbol($1, type_with_array);
+        free(base_type);
+    }
+    | CONSTANT_DECLARATION ASSIGN_OP expression {
+        char *var_type = get_variable_type($1);
+        char *expr_type = get_type_string($3);
+        
+        if (!expr_type) {
+            char error_msg[100];
+            sprintf(error_msg, "Invalid value type for constant parameter initialization");
+            yyerror(error_msg);
+            $$ = "";
+        }
+        else if (!check_type_compatibility(var_type, expr_type)) {
+            char error_msg[100];
+            sprintf(error_msg, "Type mismatch in constant parameter initialization: expected %s, got %s", var_type, expr_type);
+            yyerror(error_msg);
+            $$ = "";
+        } else {
+            printf("Parameter Constant Declaration: %s of type %s with value %s\n", $1, var_type, $3);
+            add_symbol_with_value($1, var_type, $3);
+            $$ = $1;
+        }
+    }
+    | CONSTANT_DECLARATION {
+        yyerror("Constant parameter declaration must have an initializer");
+        $$ = "";
+    }
+    | parameter_declarations ',' VARIABLE_DECLARATION {
+        char *result = malloc(strlen($1) + strlen($3) + 2);
+        sprintf(result, "%s,%s", $1, $3);
         $$ = result;
+        char *var_type = get_variable_type($3);
+        printf("Parameter Variable Declaration: %s of type %s\n", $3, var_type);
+        add_symbol($3, var_type);
+    }
+    | parameter_declarations ',' ARRAY_DECLARATION {
+        char *result = malloc(strlen($1) + strlen($3) + 2);
+        sprintf(result, "%s,%s", $1, $3);
+        $$ = result;
+        char *base_type = get_array_base_type($3);
+        char type_with_array[100];
+        sprintf(type_with_array, "%s[]", base_type);
+        printf("Parameter Array Declaration: %s of type %s\n", $3, type_with_array);
+        add_symbol($3, type_with_array);
+        free(base_type);
+    }
+    | parameter_declarations ',' CONSTANT_DECLARATION ASSIGN_OP expression {
+        char *var_type = get_variable_type($3);
+        char *expr_type = get_type_string($5);
+        
+        if (!expr_type) {
+            char error_msg[100];
+            sprintf(error_msg, "Invalid value type for constant parameter initialization");
+            yyerror(error_msg);
+            $$ = $1;  // Keep previous parameters
+        }
+        else if (!check_type_compatibility(var_type, expr_type)) {
+            char error_msg[100];
+            sprintf(error_msg, "Type mismatch in constant parameter initialization: expected %s, got %s", var_type, expr_type);
+            yyerror(error_msg);
+            $$ = $1;  // Keep previous parameters
+        } else {
+            char *result = malloc(strlen($1) + strlen($3) + 2);
+            sprintf(result, "%s,%s", $1, $3);
+            $$ = result;
+            printf("Parameter Constant Declaration: %s of type %s with value %s\n", $3, var_type, $5);
+            add_symbol_with_value($3, var_type, $5);
+        }
     }
     ;
 
@@ -524,8 +639,8 @@ primary_expression:
         }
         $$ = strdup(buf); 
     }
-    | STRING_LITERAL {
-        $$ = $1;  // Keep the actual string value
+    | STRING_LITERAL { 
+        $$ = $1; 
     }
     | IDENTIFIER { 
         Symbol *sym = find_symbol($1);
@@ -533,11 +648,15 @@ primary_expression:
             yyerror("Undeclared identifier");
             $$ = strdup("");
         } else {
-            $$ = strdup($1);  // Keep the identifier name
+            $$ = sym->value ? strdup(sym->value) : strdup($1);
         }
     }
-    | '(' expression ')' { $$ = $2; }
-    | '[' expression ']' { $$ = $2; }
+    | '(' expression ')' { 
+        $$ = $2; 
+    }
+    | '[' expression ']' { 
+        $$ = $2; 
+    }
     ;
 
 expr_arithmetic:
@@ -684,13 +803,11 @@ void yyerror(const char *s) {
 }
 
 int main(void) {
-    // Initialize tracking variables
     line_num = 1;
     char_num = 1;
     
     int result = yyparse();
     
-    // Print final statistics
     printf("\n=== Operation Statistics ===\n");
     printf("Keywords: %d\n", keywords);
     printf("Identifiers: %d\n", identifiers);
