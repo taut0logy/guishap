@@ -116,7 +116,7 @@ char* float_to_string(float value) {
     return COLLECTION_START; 
 }
 
-"shap"[ \t]+[a-zA-Z][a-zA-Z0-9_]*[ \t]*"(" {
+"shap"[ \t]+[a-zA-Z][a-zA-Z0-9_]*[ \t]* {
     update_char_pos();
     functions++;
     keywords++;
@@ -133,7 +133,7 @@ char* float_to_string(float value) {
     return FUNCTION_DEF;
 }
 
-">"[ \t]*[a-zA-Z][a-zA-Z0-9_]*[ \t]* {
+[ \t]*">"[ \t]*[a-zA-Z][a-zA-Z0-9_]*[ \t]* {
     update_char_pos();
     char* type = strdup(yytext + 1);  // Skip ">"
     while (isspace(*type)) type++;
@@ -165,7 +165,7 @@ char* float_to_string(float value) {
     return CONSTANT_DECLARATION;
 }
 
-[a-zA-Z_][a-zA-Z0-9_]*"%"[a-zA-Z_][a-zA-Z0-9_]*"[]" {
+"_"[a-zA-Z][a-zA-Z0-9_]*"%"[a-zA-Z_][a-zA-Z0-9_]*"[]" {
     update_char_pos();
     arrays++;
     declarations++;
@@ -173,7 +173,7 @@ char* float_to_string(float value) {
     return ARRAY_DECLARATION;
 }
 
-[a-zA-Z_][a-zA-Z0-9_]*"%"[a-zA-Z_][a-zA-Z0-9_]* {
+"_"[a-zA-Z][a-zA-Z0-9_]*"%"[a-zA-Z_][a-zA-Z0-9_]* {
     update_char_pos();
     declarations++;
     yylval.stringValue = strdup(yytext);

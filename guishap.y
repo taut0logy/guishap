@@ -4,14 +4,160 @@
 #include <string.h>
 #include <ctype.h>
 
-void yyerror(const char *s);
-int yylex(void);
-
-// External variables for tracking position
+// External declarations for lexer variables
 extern int line_num;
 extern int char_num;
 extern char *yytext;
 extern int yyleng;
+extern int yychar;
+
+// Token name lookup table
+const char* token_names[] = {
+    "COLLECTION_START",
+    "NEWLINE",
+    "EMPTY_LINE",
+    "ASSIGN_OP",
+    "MEMBER_ACCESS",
+    "INTEGER",
+    "FLOAT",
+    "STRING_LITERAL",
+    "IDENTIFIER",
+    "CONSTANT_DECLARATION",
+    "VARIABLE_DECLARATION",
+    "ARRAY_IDENTIFIER",
+    "ARRAY_DECLARATION",
+    "FUNCTION",
+    "FUNCTION_DEF",
+    "RETURN_TYPE",
+    "LOOP_TILL",
+    "LOOP_FOR",
+    "BREAK",
+    "CONTINUE",
+    "RETURN",
+    "IF",
+    "ELIF",
+    "ELSE",
+    "CASE",
+    "BLOCK_COMMENT",
+    "LINE_COMMENT",
+    "SEMICOLON",
+    "ARITHMETIC_OP_PLUS",
+    "ARITHMETIC_OP_MINUS",
+    "ARITHMETIC_OP_MULT",
+    "ARITHMETIC_OP_DIV",
+    "BITWISE_OP_AND",
+    "BITWISE_OP_OR",
+    "BITWISE_OP_NOT",
+    "BITWISE_OP_XOR",
+    "CONDITIONAL_OP_EQ",
+    "CONDITIONAL_OP_LT",
+    "CONDITIONAL_OP_GT",
+    "CONDITIONAL_OP_LE",
+    "CONDITIONAL_OP_GE",
+    "LOGICAL_OP_AND",
+    "LOGICAL_OP_OR",
+    "LOGICAL_OP_NOT"
+};
+
+// Non-terminal name lookup table
+const char* nonterminal_names[] = {
+    "statement",
+    "statement_list",
+    "if_statement",
+    "block",
+    "case_statement",
+    "case_block",
+    "expression",
+    "expr_arithmetic",
+    "expr_bitwise",
+    "expr_conditional",
+    "expr_logical",
+    "primary_expression",
+    "function_statement",
+    "assignment",
+    "loop_statement",
+    "program",
+    "collection_member",
+    "collection_members",
+    "declaration",
+    "members_with_newlines",
+    "ws_or_newlines",
+    "collection_declaration",
+    "case_list",
+    "case_item",
+    "parameter_list",
+    "parameter_declarations"
+};
+
+// Function to get token name
+const char* get_token_name(int token) {
+    if (token < 128) {  // ASCII characters
+        static char single_char[2];
+        single_char[0] = (char)token;
+        single_char[1] = '\0';
+        return single_char;
+    }
+    
+    // Adjust token to index into token_names array
+    int index = token - 258;  // 258 is the start of token values in bison
+    if (index >= 0 && index < sizeof(token_names)/sizeof(token_names[0])) {
+        return token_names[index];
+    }
+    return "UNKNOWN_TOKEN";
+}
+
+// Function to get non-terminal name
+const char* get_nonterminal_name(int nonterminal) {
+    if (nonterminal >= 0 && nonterminal < sizeof(nonterminal_names)/sizeof(nonterminal_names[0])) {
+        return nonterminal_names[nonterminal];
+    }
+    return "UNKNOWN_NONTERMINAL";
+}
+
+void yyerror(const char *s) {
+    fprintf(stderr, "Error at line %d, character %d: %s\n", line_num, char_num - yyleng, s);
+    fprintf(stderr, "Near token: '%s'\n", yytext);
+    
+    // Print token name
+    fprintf(stderr, "Terminal/Non-terminal: %s\n", get_token_name(yychar));
+    
+    // Print token type information
+    if (strstr(yytext, "__%") != NULL) {
+        fprintf(stderr, "Token type: Constant Declaration\n");
+    } else if (strstr(yytext, "_%") != NULL && strstr(yytext, "[]") != NULL) {
+        fprintf(stderr, "Token type: Array Declaration\n");
+    } else if (strstr(yytext, "_%") != NULL) {
+        fprintf(stderr, "Token type: Variable Declaration\n");
+    } else if (strstr(yytext, "shap") != NULL) {
+        fprintf(stderr, "Token type: Function Definition\n");
+    } else if (strstr(yytext, "col") != NULL) {
+        fprintf(stderr, "Token type: Collection Definition\n");
+    } else if (strstr(yytext, "loop") != NULL) {
+        fprintf(stderr, "Token type: Loop Statement\n");
+    } else if (strstr(yytext, "if") != NULL || strstr(yytext, "elif") != NULL || strstr(yytext, "else") != NULL) {
+        fprintf(stderr, "Token type: Conditional Statement\n");
+    } else if (strstr(yytext, "case") != NULL) {
+        fprintf(stderr, "Token type: Case Statement\n");
+    } else if (isdigit(yytext[0]) || (yytext[0] == '-' && isdigit(yytext[1]))) {
+        if (strchr(yytext, '.') != NULL) {
+            fprintf(stderr, "Token type: Float Literal\n");
+        } else {
+            fprintf(stderr, "Token type: Integer Literal\n");
+        }
+    } else if (yytext[0] == '"') {
+        fprintf(stderr, "Token type: String Literal\n");
+    } else if (isalpha(yytext[0]) || yytext[0] == '_') {
+        fprintf(stderr, "Token type: Identifier\n");
+    } else {
+        fprintf(stderr, "Token type: Operator/Symbol\n");
+    }
+
+}
+
+int yylex(void);
+
+
+
 
 // Add external declarations for variables from lexer
 extern int line_comments;
@@ -501,7 +647,7 @@ function_statement:
             printf("Function Definition: %s with return type %s\n", $1, $3); 
         }
     }
-    | FUNCTION_DEF parameter_list block { 
+    | FUNCTION_DEF parameter_list block {
         if (find_symbol($1)) {
             yyerror("Duplicate function definition");
             $$.name = "";
@@ -796,11 +942,6 @@ ws_or_newlines:
     ;
 
 %%
-
-void yyerror(const char *s) {
-    fprintf(stderr, "Error at line %d, character %d: %s\n", line_num, char_num - yyleng, s);
-    fprintf(stderr, "Near token: '%s'\n", yytext);
-}
 
 int main(void) {
     line_num = 1;
