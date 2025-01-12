@@ -42,7 +42,7 @@ shap calcAvg (_grades%float[])>float {
     _sum%float:0.0;
     _count%int:0;
     
-    loop _i%int for [0..len(_grades)..1] {
+    loop _i%int for [0..5..1] {
         _sum:_sum + _grades[_i];
         _count:_count + 1;
     }
@@ -58,6 +58,10 @@ shap calcAvg (_grades%float[])>float {
 # The case statement can have a default case, which is an empty square brackets
 # The case statement can have a break statement to exit the case block
 # The case statement can have a continue statement to skip the rest of the current iteration
+
+shap print (_message%string)>void {
+    # printf("%s\n", _message);
+}
 
 shap getGrade (_score%float)>string {
     case [score] {

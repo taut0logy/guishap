@@ -2,969 +2,757 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 
 // External declarations for lexer variables
-extern int line_num;
-extern int char_num;
+extern int line_number;
 extern char *yytext;
-extern int yyleng;
-extern int yychar;
+extern int yylineno;
+extern FILE *yyin;
 
-// Token name lookup table
-const char* token_names[] = {
-    "COLLECTION_START",
-    "NEWLINE",
-    "EMPTY_LINE",
-    "ASSIGN_OP",
-    "MEMBER_ACCESS",
-    "INTEGER",
-    "FLOAT",
-    "STRING_LITERAL",
-    "IDENTIFIER",
-    "CONSTANT_DECLARATION",
-    "VARIABLE_DECLARATION",
-    "ARRAY_IDENTIFIER",
-    "ARRAY_DECLARATION",
-    "FUNCTION",
-    "FUNCTION_DEF",
-    "RETURN_TYPE",
-    "LOOP_TILL",
-    "LOOP_FOR",
-    "BREAK",
-    "CONTINUE",
-    "RETURN",
-    "IF",
-    "ELIF",
-    "ELSE",
-    "CASE",
-    "BLOCK_COMMENT",
-    "LINE_COMMENT",
-    "SEMICOLON",
-    "ARITHMETIC_OP_PLUS",
-    "ARITHMETIC_OP_MINUS",
-    "ARITHMETIC_OP_MULT",
-    "ARITHMETIC_OP_DIV",
-    "BITWISE_OP_AND",
-    "BITWISE_OP_OR",
-    "BITWISE_OP_NOT",
-    "BITWISE_OP_XOR",
-    "CONDITIONAL_OP_EQ",
-    "CONDITIONAL_OP_LT",
-    "CONDITIONAL_OP_GT",
-    "CONDITIONAL_OP_LE",
-    "CONDITIONAL_OP_GE",
-    "LOGICAL_OP_AND",
-    "LOGICAL_OP_OR",
-    "LOGICAL_OP_NOT"
-};
-
-// Non-terminal name lookup table
-const char* nonterminal_names[] = {
-    "statement",
-    "statement_list",
-    "if_statement",
-    "block",
-    "case_statement",
-    "case_block",
-    "expression",
-    "expr_arithmetic",
-    "expr_bitwise",
-    "expr_conditional",
-    "expr_logical",
-    "primary_expression",
-    "function_statement",
-    "assignment",
-    "loop_statement",
-    "program",
-    "collection_member",
-    "collection_members",
-    "declaration",
-    "members_with_newlines",
-    "ws_or_newlines",
-    "collection_declaration",
-    "case_list",
-    "case_item",
-    "parameter_list",
-    "parameter_declarations"
-};
-
-// Function to get token name
-const char* get_token_name(int token) {
-    if (token < 128) {  // ASCII characters
-        static char single_char[2];
-        single_char[0] = (char)token;
-        single_char[1] = '\0';
-        return single_char;
-    }
-    
-    // Adjust token to index into token_names array
-    int index = token - 258;  // 258 is the start of token values in bison
-    if (index >= 0 && index < sizeof(token_names)/sizeof(token_names[0])) {
-        return token_names[index];
-    }
-    return "UNKNOWN_TOKEN";
-}
-
-// Function to get non-terminal name
-const char* get_nonterminal_name(int nonterminal) {
-    if (nonterminal >= 0 && nonterminal < sizeof(nonterminal_names)/sizeof(nonterminal_names[0])) {
-        return nonterminal_names[nonterminal];
-    }
-    return "UNKNOWN_NONTERMINAL";
-}
-
-void yyerror(const char *s) {
-    fprintf(stderr, "Error at line %d, character %d: %s\n", line_num, char_num - yyleng, s);
-    fprintf(stderr, "Near token: '%s'\n", yytext);
-    
-    // Print token name
-    fprintf(stderr, "Terminal/Non-terminal: %s\n", get_token_name(yychar));
-    
-    // Print token type information
-    if (strstr(yytext, "__%") != NULL) {
-        fprintf(stderr, "Token type: Constant Declaration\n");
-    } else if (strstr(yytext, "_%") != NULL && strstr(yytext, "[]") != NULL) {
-        fprintf(stderr, "Token type: Array Declaration\n");
-    } else if (strstr(yytext, "_%") != NULL) {
-        fprintf(stderr, "Token type: Variable Declaration\n");
-    } else if (strstr(yytext, "shap") != NULL) {
-        fprintf(stderr, "Token type: Function Definition\n");
-    } else if (strstr(yytext, "col") != NULL) {
-        fprintf(stderr, "Token type: Collection Definition\n");
-    } else if (strstr(yytext, "loop") != NULL) {
-        fprintf(stderr, "Token type: Loop Statement\n");
-    } else if (strstr(yytext, "if") != NULL || strstr(yytext, "elif") != NULL || strstr(yytext, "else") != NULL) {
-        fprintf(stderr, "Token type: Conditional Statement\n");
-    } else if (strstr(yytext, "case") != NULL) {
-        fprintf(stderr, "Token type: Case Statement\n");
-    } else if (isdigit(yytext[0]) || (yytext[0] == '-' && isdigit(yytext[1]))) {
-        if (strchr(yytext, '.') != NULL) {
-            fprintf(stderr, "Token type: Float Literal\n");
-        } else {
-            fprintf(stderr, "Token type: Integer Literal\n");
-        }
-    } else if (yytext[0] == '"') {
-        fprintf(stderr, "Token type: String Literal\n");
-    } else if (isalpha(yytext[0]) || yytext[0] == '_') {
-        fprintf(stderr, "Token type: Identifier\n");
-    } else {
-        fprintf(stderr, "Token type: Operator/Symbol\n");
-    }
-
-}
-
+// Function declarations
 int yylex(void);
+void yyerror(const char *s);
 
-
-
-
-// Add external declarations for variables from lexer
-extern int line_comments;
-extern int block_comments;
-extern int declarations;
-extern int functions;
-extern int collections;
-extern int arrays;
-extern int identifiers;
-extern int keywords;
-extern int operators;
-extern int loops;
-extern int conditions;
-extern int semicolons;
-
-// Add position tracking variables
-int prev_line_num = 1;
-int prev_char_num = 0;
-
-// Function to update position
-void update_position() {
-    prev_line_num = line_num;
-    prev_char_num = char_num;
-}
-
-// Add this function to track token position
-void update_token_pos() {
-    prev_line_num = line_num;
-    prev_char_num = char_num - yyleng;  // Start position of current token
-}
-
+// Symbol table structure
 typedef struct Symbol {
     char *name;
-    char *data_type;
-    char *value;
-    int defined;
+    char *type;
+    int is_const;
+    int is_array;
+    int scope_level;
     struct Symbol *next;
 } Symbol;
 
+// Function table structure
+typedef struct Function {
+    char *name;
+    char *return_type;
+    Symbol *params;
+    int scope_level;
+    struct Function *next;
+} Function;
+
+// Collection table structure
+typedef struct Collection {
+    char *name;
+    Symbol *members;
+    int scope_level;
+    struct Collection *next;
+} Collection;
+
+// Global symbol tables
 Symbol *symbol_table = NULL;
+Function *function_table = NULL;
+Collection *collection_table = NULL;
 
-void add_symbol(char *name, char *data_type) {
-    Symbol *sym = (Symbol *)malloc(sizeof(Symbol));
-    sym->name = strdup(name);
-    sym->data_type = strdup(data_type);
-    sym->defined = 0;
-    sym->next = symbol_table;
-    symbol_table = sym;
-}
+// Current scope tracking
+extern int scope_level;
+extern char current_function[256];
 
-Symbol *find_symbol(char *name) {
-    Symbol *sym = symbol_table;
-    while (sym) {
-        if (strcmp(sym->name, name) == 0) {
-            return sym;
-        }
-        sym = sym->next;
-    }
-    return NULL;
-}
-
-void define_symbol(char *name) {
-    Symbol *sym = find_symbol(name);
-    if (sym) {
-        sym->defined = 1;
-    }
-}
-
-int check_main_defined() {
-    Symbol *sym = find_symbol("main");
-    return sym && sym->defined;
-}
-
-// Add counters for operations
-int function_calls = 0;
-int initializations = 0;
+// Statistics
+int declarations = 0;
 int assignments = 0;
-int arithmetic_ops = 0;
-int bitwise_ops = 0;
-int logical_ops = 0;
-int conditional_ops = 0;
+int function_calls = 0;
+int conditions = 0;
+int loops = 0;
 
-// Add helper function for type checking
-char* get_variable_type(const char* var_decl) {
-    char* type_start = strchr(var_decl, '%');
-    if (!type_start) return NULL;
-    return type_start + 1;
-}
+// Helper functions
+void enter_scope(void);
+void exit_scope(void);
+void add_symbol(const char *name, const char *type, int is_const, int is_array);
+void add_function(const char *name, const char *return_type);
+void add_collection(const char *name);
+Symbol *find_symbol(const char *name);
+Function *find_function(const char *name);
+Collection *find_collection(const char *name);
+void print_scope_info(const char *action, const char *details);
 
-// Add helper function for array type checking
-char* get_array_base_type(const char* var_decl) {
-    char* type_start = strchr(var_decl, '%');
-    if (!type_start) return NULL;
-    
-    // Create a copy of the type portion
-    char* type = strdup(type_start + 1);
-    
-    // Remove the [] suffix if present
-    char* array_suffix = strstr(type, "[]");
-    if (array_suffix) {
-        *array_suffix = '\0';
-    }
-    
-    return type;
-}
-
-// Add function to get type string from value
-char* get_type_string(const char* value) {
-    if (!value || value[0] == '\0') return NULL;
-    
-    // Check if it's a string literal (starts and ends with quotes)
-    if (value[0] == '"') {
-        int len = strlen(value);
-        if (len >= 2 && value[len-1] == '"') {
-            return "string";
-        }
-        return NULL;  // Invalid string literal
-    }
-    
-    // Check if it's a float (contains a decimal point)
-    if (strchr(value, '.') != NULL) {
-        // Verify it's a valid float
-        char* endptr;
-        strtof(value, &endptr);
-        if (*endptr == '\0') return "float";
-        return NULL;
-    }
-    
-    // Try to parse as int
-    char* endptr;
-    strtol(value, &endptr, 10);
-    if (*endptr == '\0') return "int";
-    
-    return NULL;
-}
-
-// Modify type compatibility check to handle string literals properly
-int check_type_compatibility(const char* var_type, const char* value_type) {
-    if (!var_type || !value_type) return 0;
-    
-    // Check if either type is an array
-    int var_is_array = strstr(var_type, "[]") != NULL;
-    int val_is_array = strstr(value_type, "[]") != NULL;
-    
-    if (var_is_array != val_is_array) return 0;  // One is array, other is not
-    
-    if (var_is_array) {
-        // Compare base types for arrays
-        char* var_base = get_array_base_type(var_type);
-        char* val_base = get_array_base_type(value_type);
-        int result = check_type_compatibility(var_base, val_base);  // Recursive check for base types
-        free(var_base);
-        free(val_base);
-        return result;
-    }
-    
-    // Direct type match
-    if (strcmp(var_type, value_type) == 0) return 1;
-    
-    // Allow numeric type conversions (both int to float and float to int)
-    if ((strcmp(var_type, "float") == 0 && strcmp(value_type, "int") == 0) ||
-        (strcmp(var_type, "int") == 0 && strcmp(value_type, "float") == 0)) {
-        return 1;
-    }
-    
-    return 0;
-}
-
-// Add this function to store numeric values in symbol table
-void add_symbol_with_value(char *name, char *data_type, char *value) {
-    Symbol *sym = (Symbol *)malloc(sizeof(Symbol));
-    sym->name = strdup(name);
-    sym->data_type = strdup(data_type);
-    sym->value = strdup(value);
-    sym->defined = 0;
-    sym->next = symbol_table;
-    symbol_table = sym;
-}
+// Operation logging functions
+void log_declaration(const char *kind, const char *name, const char *type, const char *value);
+void log_assignment(const char *target, const char *value, const char *type);
+void log_operation(const char *op, const char *left, const char *right, const char *result);
+void log_function_call(const char *name, int arg_count);
+void log_condition(const char *type, const char *condition);
+void log_loop(const char *type, const char *condition);
+void log_collection_access(const char *collection, const char *member);
+void log_array_access(const char *array, const char *index);
 
 %}
 
-// Add new tokens
-%token <stringValue> COLLECTION_START
-%token NEWLINE EMPTY_LINE
-%token ASSIGN_OP
-%token MEMBER_ACCESS
-
 %union {
-    int intValue;
-    float floatValue;
-    char *stringValue;
+    int ival;
+    float fval;
+    char *sval;
     struct {
         char *name;
         char *type;
-    } declaration;
-    struct {
-        char *name;
-        char *returnType;
-    } function;
+    } decl;
 }
 
-%token <intValue> INTEGER
-%token <floatValue> FLOAT
-%token <stringValue> STRING_LITERAL IDENTIFIER
-%token <stringValue> CONSTANT_DECLARATION VARIABLE_DECLARATION ARRAY_IDENTIFIER
-%token <stringValue> FUNCTION
-%token LOOP_TILL LOOP_FOR BREAK CONTINUE RETURN IF ELIF ELSE CASE 
-%token BLOCK_COMMENT LINE_COMMENT SEMICOLON
+/* Tokens */
+%token <sval> IDENTIFIER STRING
+%token <ival> INTEGER
+%token <fval> FLOAT
 
-%token <stringValue> ARITHMETIC_OP_PLUS ARITHMETIC_OP_MINUS ARITHMETIC_OP_MULT ARITHMETIC_OP_DIV
-%token <stringValue> BITWISE_OP_AND BITWISE_OP_OR BITWISE_OP_NOT BITWISE_OP_XOR
-%token <stringValue> CONDITIONAL_OP_EQ CONDITIONAL_OP_LT CONDITIONAL_OP_GT CONDITIONAL_OP_LE CONDITIONAL_OP_GE
-%token <stringValue> LOGICAL_OP_AND LOGICAL_OP_OR LOGICAL_OP_NOT
+/* Keywords */
+%token COL SHAP RET
+%token LOOP_TILL LOOP FOR
+%token BREAK CONTINUE
+%token IF ELIF ELSE CASE
+%token TYPE_VOID TYPE_INT TYPE_FLOAT TYPE_STRING TYPE_BOOL
 
-%type <stringValue> statement statement_list
-%type <stringValue> if_statement block case_statement case_block
-%type <stringValue> expression expr_arithmetic expr_bitwise expr_conditional expr_logical
-%type <stringValue> primary_expression
-%type <function> function_statement
-%type <stringValue> assignment loop_statement
-%type <stringValue> program
-%type <declaration> collection_member collection_members declaration
-%type <declaration> members_with_newlines
-%type <stringValue> ws_or_newlines collection_declaration
-%type <stringValue> case_list case_item
-%type <stringValue> parameter_list parameter_declarations
+/* Declarations */
+%token <sval> VAR_DECL CONST_DECL ARRAY_DECL
 
+/* Operators */
+%token ASSIGN RANGE
+%token EQ LT GT LE GE
+%token AND OR NOT
 
-%nonassoc IF
-%nonassoc THEN
-%nonassoc ELSE ELIF
-%left SEMICOLON
-%right ASSIGN_OP
-%left ','
-%left MEMBER_ACCESS
+/* Types */
+%type <sval> type expression statement
+%type <decl> declaration
+%type <sval> member_list member parameter_list parameter
+%type <sval> block case_list case_item argument_list
 
-%left LOGICAL_OP_OR
-%left LOGICAL_OP_AND
-%left BITWISE_OP_OR
-%left BITWISE_OP_XOR
-%left BITWISE_OP_AND
-%left CONDITIONAL_OP_EQ
-%left CONDITIONAL_OP_LT CONDITIONAL_OP_GT CONDITIONAL_OP_LE CONDITIONAL_OP_GE
-%left ARITHMETIC_OP_PLUS ARITHMETIC_OP_MINUS
-%left ARITHMETIC_OP_MULT ARITHMETIC_OP_DIV
-%right LOGICAL_OP_NOT BITWISE_OP_NOT
-%right UNARY_MINUS
-%left '(' ')'
-%left '[' ']'
-%left '{' '}'
-
-%token <stringValue> ARRAY_DECLARATION
-
-// Add new tokens for function definition
-%token <stringValue> FUNCTION_DEF
-%token <stringValue> RETURN_TYPE
-%token RET
+/* Operator precedence */
+%left OR
+%left AND
+%left '|'
+%left '^'
+%left '&'
+%left EQ
+%left LT GT LE GE
+%left '+' '-'
+%left '*' '/' '%'
+%right NOT '~'
+%right UMINUS
 
 %%
 
-program: 
-    statement_list { $$ = $1; }
+program
+    : statement_list
     ;
 
-statement_list:
-    /* empty */               { $$ = strdup(""); }
-    | statement_list statement { 
-        if ($1 && $2) {
-            char *result = malloc(strlen($1) + strlen($2) + 2);
-            sprintf(result, "%s\n%s", $1, $2);
-            $$ = result;
-        } else if ($2) {
-            $$ = strdup($2);
-        } else if ($1) {
-            $$ = strdup($1);
+statement_list
+    : statement
+    | statement_list statement
+    ;
+
+statement
+    : declaration ';'                  { $$ = $1.name; }
+    | collection_definition           { $$ = "collection"; }
+    | function_definition            { $$ = "function"; }
+    | assignment ';'                 { $$ = "assignment"; }
+    | expression ';'                 { $$ = $1; }
+    | if_statement                   { $$ = "if"; conditions++; }
+    | loop_statement                 { $$ = "loop"; }
+    | case_statement                 { $$ = "case"; }
+    | BREAK ';'                      { print_scope_info("Break Statement", ""); $$ = "break"; }
+    | CONTINUE ';'                   { print_scope_info("Continue Statement", ""); $$ = "continue"; }
+    | RET expression ';'             { print_scope_info("Return Statement", $2); $$ = "return"; }
+    | block                          { $$ = $1; }
+    | ';'                           { $$ = "empty"; }
+    ;
+
+declaration
+    : VAR_DECL {
+        char *type = strchr($1, '%');
+        if (type) {
+            type++;
+            $$.name = $1;
+            $$.type = strdup(type);
+            add_symbol($1, type, 0, 0);
+            declarations++;
+            log_declaration("Variable", $1, type, NULL);
+        }
+    }
+    | CONST_DECL {
+        char *type = strchr($1, '%');
+        if (type) {
+            type++;
+            $$.name = $1;
+            $$.type = strdup(type);
+            add_symbol($1, type, 1, 0);
+            declarations++;
+            log_declaration("Constant", $1, type, NULL);
+        }
+    }
+    | ARRAY_DECL {
+        char *type = strchr($1, '%');
+        if (type) {
+            type++;
+            $$.name = $1;
+            $$.type = strdup(type);
+            add_symbol($1, type, 0, 1);
+            declarations++;
+            log_declaration("Array", $1, type, NULL);
+        }
+    }
+    | VAR_DECL ASSIGN expression {
+        char *type = strchr($1, '%');
+        if (type) {
+            type++;
+            $$.name = $1;
+            $$.type = strdup(type);
+            add_symbol($1, type, 0, 0);
+            declarations++;
+            assignments++;
+            log_declaration("Variable", $1, type, $3);
+        }
+    }
+    | CONST_DECL ASSIGN expression {
+        char *type = strchr($1, '%');
+        if (type) {
+            type++;
+            $$.name = $1;
+            $$.type = strdup(type);
+            add_symbol($1, type, 1, 0);
+            declarations++;
+            assignments++;
+            log_declaration("Constant", $1, type, $3);
+        }
+    }
+    | ARRAY_DECL ASSIGN expression {
+        char *type = strchr($1, '%');
+        if (type) {
+            type++;
+            $$.name = $1;
+            $$.type = strdup(type);
+            add_symbol($1, type, 0, 1);
+            declarations++;
+            assignments++;
+            log_declaration("Array", $1, type, $3);
+        }
+    }
+    ;
+
+collection_definition
+    : COL IDENTIFIER { enter_scope(); print_scope_info("Collection Start", $2); }
+      '{' member_list '}' ';' {
+        add_collection($2);
+        print_scope_info("Collection End", $2);
+        exit_scope();
+    }
+    ;
+
+member_list
+    : member                        { $$ = $1; }
+    | member_list ',' member        { $$ = $3; }
+    ;
+
+member
+    : VAR_DECL                     { 
+        $$ = $1;
+        char *type = strchr($1, '%');
+        if (type) {
+            type++;
+            add_symbol($1, type, 0, 0);
+            print_scope_info("Collection Member", $1);
+        }
+    }
+    | ARRAY_DECL                   { 
+        $$ = $1;
+        char *type = strchr($1, '%');
+        if (type) {
+            type++;
+            add_symbol($1, type, 0, 1);
+            print_scope_info("Collection Array Member", $1);
+        }
+    }
+    ;
+
+function_definition
+    : SHAP IDENTIFIER { 
+        enter_scope(); 
+        strncpy(current_function, $2, sizeof(current_function)-1);
+        print_scope_info("Function Start", $2);
+    }
+    '(' parameter_list ')' '>' type block {
+        add_function($2, $8);
+        print_scope_info("Function End", $2);
+        current_function[0] = '\0';
+        exit_scope();
+    }
+    ;
+
+parameter_list
+    : /* empty */                  { $$ = ""; }
+    | parameter                    { $$ = $1; }
+    | parameter_list ',' parameter { $$ = $3; }
+    ;
+
+parameter
+    : VAR_DECL                     { 
+        $$ = $1;
+        char *type = strchr($1, '%');
+        if (type) {
+            type++;
+            add_symbol($1, type, 0, 0);
+            print_scope_info("Parameter", $1);
+        }
+    }
+    | ARRAY_DECL                   { 
+        $$ = $1;
+        char *type = strchr($1, '%');
+        if (type) {
+            type++;
+            add_symbol($1, type, 0, 1);
+            print_scope_info("Array Parameter", $1);
+        }
+    }
+    | CONST_DECL ASSIGN expression { 
+        $$ = $1;
+        char *type = strchr($1, '%');
+        if (type) {
+            type++;
+            add_symbol($1, type, 1, 0);
+            print_scope_info("Constant Parameter", $1);
+        }
+    }
+    ;
+
+block
+    : '{' { enter_scope(); } statement_list '}' { 
+        $$ = "block";
+        exit_scope();
+    }
+    | '{' '}' { $$ = "empty block"; }
+    ;
+
+assignment
+    : IDENTIFIER ASSIGN expression {
+        Symbol *sym = find_symbol($1);
+        if (sym) {
+            if (sym->is_const) {
+                yyerror("Cannot assign to constant");
+            } else {
+                assignments++;
+                log_assignment($1, $3, sym->type);
+            }
         } else {
-            $$ = strdup("");
+            char error[256];
+            snprintf(error, sizeof(error), "Undefined variable '%s'", $1);
+            yyerror(error);
         }
     }
-    ;
-
-statement:
-    declaration SEMICOLON    { $$ = strdup(""); }
-    | assignment SEMICOLON   { $$ = $1; }
-    | expression SEMICOLON   { $$ = $1; }
-    | BLOCK_COMMENT         { 
-        printf("Block Comment processed in statement\n");
-        $$ = strdup(""); 
-    }
-    | LINE_COMMENT          { 
-        printf("Line Comment processed in statement\n");
-        $$ = strdup(""); 
-    }
-    | BREAK SEMICOLON       { $$ = strdup("break"); }
-    | CONTINUE SEMICOLON    { $$ = strdup("continue"); }
-    | RETURN expression SEMICOLON { $$ = strdup("return"); }
-    | if_statement         { $$ = $1; }
-    | loop_statement       { $$ = $1; }
-    | function_statement   { $$ = strdup(""); }
-    | collection_declaration { $$ = $1; }
-    | case_statement       { $$ = $1; }
-    | block               { $$ = $1; }
-    ;
-
-if_statement:
-    IF '[' expression ']' block %prec THEN        { $$ = strdup("if"); }
-    | if_statement ELSE block             { $$ = strdup("if-else"); }
-    | if_statement ELIF '[' expression ']' block  { $$ = strdup("if-elif"); }
-    ;
-
-case_statement:
-    CASE '[' expression ']' case_block    { $$ = strdup("case"); }
-    ;
-
-case_block:
-    '{' case_list '}'                     { $$ = strdup("case-block"); }
-    ;
-
-case_list:
-    case_item                { $$ = $1; }
-    | case_list case_item    { 
-        char *result = malloc(strlen($1) + strlen($2) + 2);
-        sprintf(result, "%s\n%s", $1, $2);
-        $$ = result;
-    }
-    ;
-
-case_item:
-    '[' expression ']' ':' statement    { 
-        char *result = malloc(strlen($2) + strlen($5) + 32);
-        sprintf(result, "case %s: %s", $2, $5);
-        $$ = result;
-    }
-    | '[' ']' ':' statement            { 
-        char *result = malloc(strlen($4) + 32);
-        sprintf(result, "default: %s", $4);
-        $$ = result;
-    }
-    ;
-
-loop_statement:
-    LOOP_TILL '[' expression ']' block    { $$ = strdup("loop_till"); }
-    | LOOP_FOR block             { $$ = strdup("loop_for"); }
-    ;
-
-block:
-    '{' statement_list '}'       { $$ = $2; }
-    ;
-
-declaration:
-    VARIABLE_DECLARATION ASSIGN_OP expression { 
-        initializations++;
-        printf("Operation: Variable Declaration with Initialization at line %d\n", line_num);
-        $$.name = $1; 
-        $$.type = "variable";
-        char *var_type = get_variable_type($1);
-        char *expr_type = get_type_string($3);
-        
-        if (!expr_type) {
-            char error_msg[100];
-            sprintf(error_msg, "Invalid value type for initialization");
-            yyerror(error_msg);
-            $$.name = "";
-        }
-        else if (!check_type_compatibility(var_type, expr_type)) {
-            char error_msg[100];
-            sprintf(error_msg, "Type mismatch in initialization: expected %s, got %s", var_type, expr_type);
-            yyerror(error_msg);
-            $$.name = "";
+    | IDENTIFIER '[' expression ']' ASSIGN expression {
+        Symbol *sym = find_symbol($1);
+        if (sym && sym->is_array) {
+            assignments++;
+            log_array_access($1, $3);
+            log_assignment($1, $6, sym->type);
         } else {
-            printf("Variable Declaration with Initialization: %s of type %s with value %s\n", $1, var_type, $3); 
-            add_symbol_with_value($1, var_type, $3);
+            char error[256];
+            snprintf(error, sizeof(error), "'%s' is not an array", $1);
+            yyerror(error);
         }
     }
-    | CONSTANT_DECLARATION ASSIGN_OP expression { 
-        initializations++;
-        printf("Operation: Constant Declaration and Initialization at line %d\n", line_num);
-        $$.name = $1; 
-        $$.type = "constant"; 
-        char *var_type = get_variable_type($1);
-        char *expr_type = get_type_string($3);
-        
-        if (!expr_type) {
-            char error_msg[100];
-            sprintf(error_msg, "Invalid value type for constant initialization");
-            yyerror(error_msg);
-            $$.name = "";
-        }
-        else if (!check_type_compatibility(var_type, expr_type)) {
-            char error_msg[100];
-            sprintf(error_msg, "Type mismatch in constant initialization: expected %s, got %s", var_type, expr_type);
-            yyerror(error_msg);
-            $$.name = "";
+    | IDENTIFIER '.' IDENTIFIER ASSIGN expression {
+        Collection *col = find_collection($1);
+        if (col) {
+            assignments++;
+            log_collection_access($1, $3);
+            log_assignment($3, $5, "member");
         } else {
-            printf("Constant Declaration: %s of type %s with value %s\n", $1, var_type, $3); 
-            add_symbol_with_value($1, var_type, $3);
+            char error[256];
+            snprintf(error, sizeof(error), "Undefined collection '%s'", $1);
+            yyerror(error);
         }
-    }
-    | CONSTANT_DECLARATION { 
-        yyerror("Constant declaration must have an initializer");
-        $$.name = "";
-        $$.type = "";
-    }
-    | VARIABLE_DECLARATION { 
-        printf("Operation: Variable Declaration at line %d\n", line_num);
-        $$.name = $1; 
-        $$.type = "variable"; 
-        char *var_type = get_variable_type($1);
-        printf("Variable Declaration: %s of type %s\n", $1, var_type); 
-        add_symbol($1, var_type);
-    }
-    | ARRAY_IDENTIFIER { 
-        $$.name = $1; 
-        $$.type = "array"; 
-        char *var_type = get_variable_type($1);
-        printf("Array Identifier: %s of type %s[]\n", $1, var_type); 
-        add_symbol($1, "array");
-    }
-    | ARRAY_DECLARATION {
-        printf("Operation: Array Declaration at line %d\n", line_num);
-        $$.name = $1;
-        $$.type = "array";
-        char *base_type = get_array_base_type($1);
-        char type_with_array[100];
-        sprintf(type_with_array, "%s[]", base_type);
-        printf("Array Declaration: %s of type %s\n", $1, type_with_array);
-        add_symbol($1, type_with_array);
-        free(base_type);
-    }
-    | ARRAY_DECLARATION ASSIGN_OP expression {
-        initializations++;
-        printf("Operation: Array Declaration with Initialization at line %d\n", line_num);
-        $$.name = $1;
-        $$.type = "array";
-        char *base_type = get_array_base_type($1);
-        char type_with_array[100];
-        sprintf(type_with_array, "%s[]", base_type);
-        
-        // Check if expression is an array of the correct type
-        if (!check_type_compatibility(type_with_array, $3)) {
-            char error_msg[100];
-            sprintf(error_msg, "Type mismatch in array initialization: expected %s, got %s", type_with_array, $3);
-            yyerror(error_msg);
-            $$.name = "";
-        } else {
-            printf("Array Declaration with Initialization: %s of type %s\n", $1, type_with_array);
-            add_symbol($1, type_with_array);
-        }
-        free(base_type);
     }
     ;
 
-assignment:
-    IDENTIFIER ASSIGN_OP expression { 
-        assignments++;
-        printf("Operation: Assignment at line %d\n", line_num);
+if_statement
+    : IF '[' expression ']' { log_condition("If", $3); enter_scope(); } 
+      block { exit_scope(); }
+    | if_statement ELIF '[' expression ']' { log_condition("Elif", $4); enter_scope(); } 
+      block { exit_scope(); }
+    | if_statement ELSE { log_condition("Else", ""); enter_scope(); } 
+      block { exit_scope(); }
+    ;
+
+loop_statement
+    : LOOP_TILL '[' expression ']' { log_loop("Loop Till", $3); enter_scope(); } 
+      block { 
+        loops++;
+        exit_scope();
+    }
+    | LOOP VAR_DECL FOR range_expression { log_loop("Loop For", $2); enter_scope(); } 
+      block { 
+        loops++;
+        exit_scope();
+    }
+    ;
+
+range_expression
+    : '[' expression RANGE expression ']'
+    | '[' expression RANGE expression RANGE expression ']'
+    ;
+
+case_statement
+    : CASE '[' expression ']' '{' case_list '}'
+    ;
+
+case_list
+    : case_item                    { $$ = $1; }
+    | case_list case_item         { $$ = $2; }
+    ;
+
+case_item
+    : '[' expression ']' ':' { enter_scope(); } statement { 
+        $$ = "case";
+        exit_scope();
+    }
+    | '[' ']' ':' { enter_scope(); } statement { 
+        $$ = "default";
+        exit_scope();
+    }
+    ;
+
+expression
+    : INTEGER                      { char buf[32]; sprintf(buf, "%d", $1); $$ = strdup(buf); }
+    | FLOAT                       { char buf[32]; sprintf(buf, "%g", $1); $$ = strdup(buf); }
+    | STRING                      { $$ = $1; }
+    | IDENTIFIER                  { 
         Symbol *sym = find_symbol($1);
         if (!sym) {
-            yyerror("Undeclared identifier");
-            $$ = strdup("");
+            char error[256];
+            snprintf(error, sizeof(error), "Undefined identifier '%s'", $1);
+            yyerror(error);
+        }
+        $$ = $1;
+    }
+    | IDENTIFIER '[' expression ']' { 
+        Symbol *sym = find_symbol($1);
+        if (!sym || !sym->is_array) {
+            char error[256];
+            snprintf(error, sizeof(error), "'%s' is not an array", $1);
+            yyerror(error);
+        }
+        log_array_access($1, $3);
+        $$ = $1;
+    }
+    | IDENTIFIER '.' IDENTIFIER   { 
+        Collection *col = find_collection($1);
+        if (!col) {
+            char error[256];
+            snprintf(error, sizeof(error), "Undefined collection '%s'", $1);
+            yyerror(error);
+        }
+        log_collection_access($1, $3);
+        $$ = $3;
+    }
+    | IDENTIFIER '(' argument_list ')' { 
+        Function *func = find_function($1);
+        if (!func) {
+            char error[256];
+            snprintf(error, sizeof(error), "Undefined function '%s'", $1);
+            yyerror(error);
         } else {
-            char *expr_type = $3;
-            if (!check_type_compatibility(sym->data_type, expr_type)) {
-                char error_msg[100];
-                sprintf(error_msg, "Type mismatch in assignment: expected %s, got %s", sym->data_type, expr_type);
-                yyerror(error_msg);
-                $$ = strdup("");
-            } else {
-                $$ = strdup($1);
-                printf("Assignment: %s = %s\n", $1, $3); 
+            function_calls++;
+            log_function_call($1, 1); // TODO: Count actual arguments
+        }
+        $$ = $1;
+    }
+    | '(' expression ')'          { $$ = $2; }
+    | expression '+' expression   { log_operation("Addition", $1, $3, "result"); $$ = "add"; }
+    | expression '-' expression   { log_operation("Subtraction", $1, $3, "result"); $$ = "sub"; }
+    | expression '*' expression   { log_operation("Multiplication", $1, $3, "result"); $$ = "mul"; }
+    | expression '/' expression   { log_operation("Division", $1, $3, "result"); $$ = "div"; }
+    | expression '%' expression   { log_operation("Modulo", $1, $3, "result"); $$ = "mod"; }
+    | expression '&' expression   { log_operation("Bitwise AND", $1, $3, "result"); $$ = "and"; }
+    | expression '|' expression   { log_operation("Bitwise OR", $1, $3, "result"); $$ = "or"; }
+    | expression '^' expression   { log_operation("Bitwise XOR", $1, $3, "result"); $$ = "xor"; }
+    | '~' expression             { log_operation("Bitwise NOT", $2, "", "result"); $$ = "not"; }
+    | expression EQ expression    { log_operation("Equals", $1, $3, "result"); $$ = "eq"; }
+    | expression LT expression    { log_operation("Less Than", $1, $3, "result"); $$ = "lt"; }
+    | expression GT expression    { log_operation("Greater Than", $1, $3, "result"); $$ = "gt"; }
+    | expression LE expression    { log_operation("Less Equal", $1, $3, "result"); $$ = "le"; }
+    | expression GE expression    { log_operation("Greater Equal", $1, $3, "result"); $$ = "ge"; }
+    | expression AND expression   { log_operation("Logical AND", $1, $3, "result"); $$ = "logical_and"; }
+    | expression OR expression    { log_operation("Logical OR", $1, $3, "result"); $$ = "logical_or"; }
+    | NOT expression             { log_operation("Logical NOT", $2, "", "result"); $$ = "logical_not"; }
+    | '-' expression %prec UMINUS { log_operation("Negation", $2, "", "result"); $$ = "neg"; }
+    ;
+
+argument_list
+    : /* empty */                  { $$ = ""; }
+    | expression                   { $$ = $1; }
+    | argument_list ',' expression { $$ = $3; }
+    ;
+
+type
+    : TYPE_VOID                    { $$ = "void"; }
+    | TYPE_INT                     { $$ = "int"; }
+    | TYPE_FLOAT                   { $$ = "float"; }
+    | TYPE_STRING                  { $$ = "string"; }
+    | TYPE_BOOL                    { $$ = "bool"; }
+    | IDENTIFIER                   { $$ = $1; }
+    ;
+
+%%
+
+void yyerror(const char *s) {
+    fprintf(stderr, "Error at line %d: %s\n", line_number, s);
+    fprintf(stderr, "Near token: '%s'\n", yytext);
+}
+
+void print_scope_info(const char *action, const char *details) {
+    char indent[256] = "";
+    for (int i = 0; i < scope_level; i++) {
+        strcat(indent, "  ");
+    }
+    
+    char context[512] = "";
+    if (current_function[0] != '\0') {
+        sprintf(context, " [in function %s]", current_function);
+    }
+    
+    printf("Line %d%s: %s%s: %s\n", line_number, context, indent, action, details);
+}
+
+void add_symbol(const char *name, const char *type, int is_const, int is_array) {
+    // Check for duplicate in current scope
+    for (Symbol *sym = symbol_table; sym != NULL; sym = sym->next) {
+        if (sym->scope_level == scope_level && strcmp(sym->name, name) == 0) {
+            char error[256];
+            snprintf(error, sizeof(error), "Duplicate identifier '%s' in current scope", name);
+            yyerror(error);
+            return;
+        }
+    }
+
+    Symbol *sym = malloc(sizeof(Symbol));
+    sym->name = strdup(name);
+    sym->type = strdup(type);
+    sym->is_const = is_const;
+    sym->is_array = is_array;
+    sym->scope_level = scope_level;
+    sym->next = symbol_table;
+    symbol_table = sym;
+}
+
+void add_function(const char *name, const char *return_type) {
+    // Check for duplicate function
+    if (find_function(name)) {
+        char error[256];
+        snprintf(error, sizeof(error), "Duplicate function '%s'", name);
+        yyerror(error);
+        return;
+    }
+
+    Function *func = malloc(sizeof(Function));
+    func->name = strdup(name);
+    func->return_type = strdup(return_type);
+    func->params = NULL;
+    func->scope_level = scope_level;
+    func->next = function_table;
+    function_table = func;
+}
+
+void add_collection(const char *name) {
+    // Check for duplicate collection
+    if (find_collection(name)) {
+        char error[256];
+        snprintf(error, sizeof(error), "Duplicate collection '%s'", name);
+        yyerror(error);
+        return;
+    }
+
+    Collection *col = malloc(sizeof(Collection));
+    col->name = strdup(name);
+    col->members = NULL;
+    col->scope_level = scope_level;
+    col->next = collection_table;
+    collection_table = col;
+}
+
+Symbol *find_symbol(const char *name) {
+    Symbol *best_match = NULL;
+    for (Symbol *sym = symbol_table; sym != NULL; sym = sym->next) {
+        if (strcmp(sym->name, name) == 0) {
+            if (!best_match || sym->scope_level > best_match->scope_level) {
+                best_match = sym;
             }
         }
     }
-    ;
+    return best_match;
+}
 
-function_statement:
-    FUNCTION_DEF parameter_list RETURN_TYPE block { 
-        if (find_symbol($1)) {
-            yyerror("Duplicate function definition");
-            $$.name = "";
-            $$.returnType = "";
-        } else {
-            add_symbol($1, $3);  // Store return type
-            define_symbol($1);
-            $$.name = $1;
-            $$.returnType = $3;
-            printf("Function Definition: %s with return type %s\n", $1, $3); 
+Function *find_function(const char *name) {
+    for (Function *func = function_table; func != NULL; func = func->next) {
+        if (strcmp(func->name, name) == 0) {
+            return func;
         }
     }
-    | FUNCTION_DEF parameter_list block {
-        if (find_symbol($1)) {
-            yyerror("Duplicate function definition");
-            $$.name = "";
-            $$.returnType = "";
-        } else {
-            add_symbol($1, "void");  // No return type specified
-            define_symbol($1);
-            $$.name = $1;
-            $$.returnType = "void";
-            printf("Function Definition: %s with no return type\n", $1); 
+    return NULL;
+}
+
+Collection *find_collection(const char *name) {
+    for (Collection *col = collection_table; col != NULL; col = col->next) {
+        if (strcmp(col->name, name) == 0) {
+            return col;
         }
     }
-    ;
+    return NULL;
+}
 
-parameter_list:
-    '(' ')'                          { $$ = strdup(""); }
-    | '(' parameter_declarations ')' { $$ = $2; }
-    ;
+int main(int argc, char *argv[]) {
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <input_file>\n", argv[0]);
+        return 1;
+    }
 
-parameter_declarations:
-    VARIABLE_DECLARATION                      { 
-        $$ = $1;
-        char *var_type = get_variable_type($1);
-        printf("Parameter Variable Declaration: %s of type %s\n", $1, var_type);
-        add_symbol($1, var_type);
+    FILE *input = fopen(argv[1], "r");
+    if (!input) {
+        fprintf(stderr, "Error: Cannot open input file '%s'\n", argv[1]);
+        return 1;
     }
-    | ARRAY_DECLARATION                       { 
-        $$ = $1;
-        char *base_type = get_array_base_type($1);
-        char type_with_array[100];
-        sprintf(type_with_array, "%s[]", base_type);
-        printf("Parameter Array Declaration: %s of type %s\n", $1, type_with_array);
-        add_symbol($1, type_with_array);
-        free(base_type);
-    }
-    | CONSTANT_DECLARATION ASSIGN_OP expression {
-        char *var_type = get_variable_type($1);
-        char *expr_type = get_type_string($3);
-        
-        if (!expr_type) {
-            char error_msg[100];
-            sprintf(error_msg, "Invalid value type for constant parameter initialization");
-            yyerror(error_msg);
-            $$ = "";
-        }
-        else if (!check_type_compatibility(var_type, expr_type)) {
-            char error_msg[100];
-            sprintf(error_msg, "Type mismatch in constant parameter initialization: expected %s, got %s", var_type, expr_type);
-            yyerror(error_msg);
-            $$ = "";
-        } else {
-            printf("Parameter Constant Declaration: %s of type %s with value %s\n", $1, var_type, $3);
-            add_symbol_with_value($1, var_type, $3);
-            $$ = $1;
-        }
-    }
-    | CONSTANT_DECLARATION {
-        yyerror("Constant parameter declaration must have an initializer");
-        $$ = "";
-    }
-    | parameter_declarations ',' VARIABLE_DECLARATION {
-        char *result = malloc(strlen($1) + strlen($3) + 2);
-        sprintf(result, "%s,%s", $1, $3);
-        $$ = result;
-        char *var_type = get_variable_type($3);
-        printf("Parameter Variable Declaration: %s of type %s\n", $3, var_type);
-        add_symbol($3, var_type);
-    }
-    | parameter_declarations ',' ARRAY_DECLARATION {
-        char *result = malloc(strlen($1) + strlen($3) + 2);
-        sprintf(result, "%s,%s", $1, $3);
-        $$ = result;
-        char *base_type = get_array_base_type($3);
-        char type_with_array[100];
-        sprintf(type_with_array, "%s[]", base_type);
-        printf("Parameter Array Declaration: %s of type %s\n", $3, type_with_array);
-        add_symbol($3, type_with_array);
-        free(base_type);
-    }
-    | parameter_declarations ',' CONSTANT_DECLARATION ASSIGN_OP expression {
-        char *var_type = get_variable_type($3);
-        char *expr_type = get_type_string($5);
-        
-        if (!expr_type) {
-            char error_msg[100];
-            sprintf(error_msg, "Invalid value type for constant parameter initialization");
-            yyerror(error_msg);
-            $$ = $1;  // Keep previous parameters
-        }
-        else if (!check_type_compatibility(var_type, expr_type)) {
-            char error_msg[100];
-            sprintf(error_msg, "Type mismatch in constant parameter initialization: expected %s, got %s", var_type, expr_type);
-            yyerror(error_msg);
-            $$ = $1;  // Keep previous parameters
-        } else {
-            char *result = malloc(strlen($1) + strlen($3) + 2);
-            sprintf(result, "%s,%s", $1, $3);
-            $$ = result;
-            printf("Parameter Constant Declaration: %s of type %s with value %s\n", $3, var_type, $5);
-            add_symbol_with_value($3, var_type, $5);
-        }
-    }
-    ;
 
-expression:
-    expr_arithmetic { $$ = $1; }
-    | expr_bitwise { $$ = $1; }
-    | expr_conditional { $$ = $1; }
-    | expr_logical { $$ = $1; }
-    | primary_expression { $$ = $1; }
-    | expression MEMBER_ACCESS IDENTIFIER { $$ = $1; }
-    | ARITHMETIC_OP_MINUS expression %prec UNARY_MINUS { 
-        arithmetic_ops++;
-        printf("Operation: Unary Minus at line %d\n", line_num);
-        $$ = $2; 
-    }
-    ;
+    // Set flex to read from input file instead of stdin
+    yyin = input;
 
-primary_expression:
-    INTEGER { 
-        char buf[32]; 
-        sprintf(buf, "%d", $1); 
-        $$ = strdup(buf); 
-    }
-    | FLOAT { 
-        char buf[32]; 
-        sprintf(buf, "%.6f", $1); 
-        // Remove trailing zeros
-        int len = strlen(buf);
-        while (len > 0 && buf[len-1] == '0') {
-            buf[--len] = '\0';
-        }
-        if (len > 0 && buf[len-1] == '.') {
-            buf[--len] = '\0';
-        }
-        $$ = strdup(buf); 
-    }
-    | STRING_LITERAL { 
-        $$ = $1; 
-    }
-    | IDENTIFIER { 
-        Symbol *sym = find_symbol($1);
-        if (!sym) {
-            yyerror("Undeclared identifier");
-            $$ = strdup("");
-        } else {
-            $$ = sym->value ? strdup(sym->value) : strdup($1);
-        }
-    }
-    | '(' expression ')' { 
-        $$ = $2; 
-    }
-    | '[' expression ']' { 
-        $$ = $2; 
-    }
-    ;
-
-expr_arithmetic:
-    expression ARITHMETIC_OP_PLUS expression { 
-        arithmetic_ops++;
-        printf("Operation: Addition at line %d\n", line_num);
-        $$ = strdup($1); 
-    }
-    | expression ARITHMETIC_OP_MINUS expression { 
-        arithmetic_ops++;
-        printf("Operation: Subtraction at line %d\n", line_num);
-        $$ = strdup($1); 
-    }
-    | expression ARITHMETIC_OP_MULT expression { 
-        arithmetic_ops++;
-        printf("Operation: Multiplication at line %d\n", line_num);
-        $$ = strdup($1); 
-    }
-    | expression ARITHMETIC_OP_DIV expression { 
-        arithmetic_ops++;
-        printf("Operation: Division at line %d\n", line_num);
-        $$ = strdup($1); 
-    }
-    ;
-
-expr_bitwise:
-    expression BITWISE_OP_AND expression { 
-        bitwise_ops++;
-        $$ = strdup($1); 
-    }
-    | expression BITWISE_OP_OR expression { 
-        bitwise_ops++;
-        $$ = strdup($1); 
-    }
-    | expression BITWISE_OP_XOR expression { 
-        bitwise_ops++;
-        $$ = strdup($1); 
-    }
-    | BITWISE_OP_NOT expression { 
-        bitwise_ops++;
-        $$ = strdup($2); 
-    }
-    ;
-
-expr_conditional:
-    expression CONDITIONAL_OP_EQ expression { 
-        conditional_ops++;
-        $$ = strdup($1); 
-    }
-    | expression CONDITIONAL_OP_LT expression { 
-        conditional_ops++;
-        $$ = strdup($1); 
-    }
-    | expression CONDITIONAL_OP_GT expression { 
-        conditional_ops++;
-        $$ = strdup($1); 
-    }
-    | expression CONDITIONAL_OP_LE expression { 
-        conditional_ops++;
-        $$ = strdup($1); 
-    }
-    | expression CONDITIONAL_OP_GE expression { 
-        conditional_ops++;
-        $$ = strdup($1); 
-    }
-    ;
-
-expr_logical:
-    expression LOGICAL_OP_AND expression { 
-        logical_ops++;
-        $$ = strdup($1); 
-    }
-    | expression LOGICAL_OP_OR expression { 
-        logical_ops++;
-        $$ = strdup($1); 
-    }
-    | LOGICAL_OP_NOT expression { 
-        logical_ops++;
-        $$ = strdup($2); 
-    }
-    ;
-
-collection_declaration:
-    COLLECTION_START members_with_newlines '}' SEMICOLON {
-        update_token_pos();
-        printf("Collection Definition complete at line %d\n", line_num);
-        $$ = strdup($2.name);
-    }
-    ;
-
-members_with_newlines:
-    collection_members                  { $$ = $1; }
-    | collection_members ws_or_newlines { $$ = $1; }
-    ;
-
-collection_members:
-    /* empty */                        { 
-        $$.name = strdup("");
-        $$.type = "collection";
-    }
-    | collection_member                { $$ = $1; }
-    | collection_members ',' collection_member {
-        char *result = malloc(strlen($1.name) + strlen($3.name) + 2);
-        sprintf(result, "%s,%s", $1.name, $3.name);
-        $$.name = result;
-        $$.type = "collection";
-    }
-    ;
-
-collection_member:
-    VARIABLE_DECLARATION {
-        update_token_pos();
-        $$.name = $1;
-        $$.type = "variable";
-        char *type = get_variable_type($1);
-        printf("Collection Member Variable: %s of type %s\n", $1, type);
-        add_symbol($1, type);
-    }
-    | ARRAY_DECLARATION {
-        update_token_pos();
-        $$.name = $1;
-        $$.type = "array";
-        char *base_type = get_array_base_type($1);
-        char type_with_array[100];
-        sprintf(type_with_array, "%s[]", base_type);
-        printf("Collection Member Array: %s of type %s\n", $1, type_with_array);
-        add_symbol($1, type_with_array);
-        free(base_type);
-    }
-    ;
-
-ws_or_newlines:
-    NEWLINE                  { $$ = strdup(""); }
-    | EMPTY_LINE             { $$ = strdup(""); }
-    | ws_or_newlines NEWLINE { $$ = strdup(""); }
-    | ws_or_newlines EMPTY_LINE { $$ = strdup(""); }
-    ;
-
-%%
-
-int main(void) {
-    line_num = 1;
-    char_num = 1;
-    
+    printf("Parsing file: %s\n\n", argv[1]);
     int result = yyparse();
     
-    printf("\n=== Operation Statistics ===\n");
-    printf("Keywords: %d\n", keywords);
-    printf("Identifiers: %d\n", identifiers);
-    printf("Line Comments: %d\n", line_comments);
-    printf("Block Comments: %d\n", block_comments);
+    printf("\n=== Compilation Statistics ===\n");
     printf("Declarations: %d\n", declarations);
-    printf("Initializations: %d\n", initializations);
     printf("Assignments: %d\n", assignments);
-    printf("Function Declarations: %d\n", functions);
     printf("Function Calls: %d\n", function_calls);
-    printf("Loops: %d\n", loops);
     printf("Conditions: %d\n", conditions);
-    printf("Arithmetic Operations: %d\n", arithmetic_ops);
-    printf("Bitwise Operations: %d\n", bitwise_ops);
-    printf("Logical Operations: %d\n", logical_ops);
-    printf("Conditional Operations: %d\n", conditional_ops);
+    printf("Loops: %d\n", loops);
     
+    fclose(input);
     return result;
+}
+
+void log_declaration(const char *kind, const char *name, const char *type, const char *value) {
+    char indent[256] = "";
+    for (int i = 0; i < scope_level; i++) {
+        strcat(indent, "  ");
+    }
+    
+    char context[512] = "";
+    if (current_function[0] != '\0') {
+        sprintf(context, " [in function %s]", current_function);
+    }
+    
+    if (value) {
+        printf("Line %d%s: %s%s Declaration: %s of type %s = %s\n", 
+               line_number, context, indent, kind, name, type, value);
+    } else {
+        printf("Line %d%s: %s%s Declaration: %s of type %s\n", 
+               line_number, context, indent, kind, name, type);
+    }
+}
+
+void log_assignment(const char *target, const char *value, const char *type) {
+    char indent[256] = "";
+    for (int i = 0; i < scope_level; i++) {
+        strcat(indent, "  ");
+    }
+    
+    char context[512] = "";
+    if (current_function[0] != '\0') {
+        sprintf(context, " [in function %s]", current_function);
+    }
+    
+    printf("Line %d%s: %sAssignment: %s = %s (type: %s)\n", 
+           line_number, context, indent, target, value, type);
+}
+
+void log_operation(const char *op, const char *left, const char *right, const char *result) {
+    char indent[256] = "";
+    for (int i = 0; i < scope_level; i++) {
+        strcat(indent, "  ");
+    }
+    
+    char context[512] = "";
+    if (current_function[0] != '\0') {
+        sprintf(context, " [in function %s]", current_function);
+    }
+    
+    if (right[0] != '\0') {
+        printf("Line %d%s: %sOperation: %s (%s, %s) = %s\n", 
+               line_number, context, indent, op, left, right, result);
+    } else {
+        printf("Line %d%s: %sOperation: %s (%s) = %s\n", 
+               line_number, context, indent, op, left, result);
+    }
+}
+
+void log_function_call(const char *name, int arg_count) {
+    char indent[256] = "";
+    for (int i = 0; i < scope_level; i++) {
+        strcat(indent, "  ");
+    }
+    
+    printf("Line %d: %sFunction Call: %s with %d argument(s)\n", 
+           line_number, indent, name, arg_count);
+}
+
+void log_condition(const char *type, const char *condition) {
+    char indent[256] = "";
+    for (int i = 0; i < scope_level; i++) {
+        strcat(indent, "  ");
+    }
+    
+    if (condition[0] != '\0') {
+        printf("Line %d: %s%s Condition: %s\n", 
+               line_number, indent, type, condition);
+    } else {
+        printf("Line %d: %s%s Branch\n", 
+               line_number, indent, type);
+    }
+}
+
+void log_loop(const char *type, const char *condition) {
+    char indent[256] = "";
+    for (int i = 0; i < scope_level; i++) {
+        strcat(indent, "  ");
+    }
+    
+    printf("Line %d: %s%s: %s\n", 
+           line_number, indent, type, condition);
+}
+
+void log_collection_access(const char *collection, const char *member) {
+    char indent[256] = "";
+    for (int i = 0; i < scope_level; i++) {
+        strcat(indent, "  ");
+    }
+    
+    printf("Line %d: %sCollection Access: %s.%s\n", 
+           line_number, indent, collection, member);
+}
+
+void log_array_access(const char *array, const char *index) {
+    char indent[256] = "";
+    for (int i = 0; i < scope_level; i++) {
+        strcat(indent, "  ");
+    }
+    
+    printf("Line %d: %sArray Access: %s[%s]\n", 
+           line_number, indent, array, index);
+}
+
+void enter_scope(void) {
+    scope_level++;
+    char indent[256] = "";
+    for (int i = 0; i < scope_level; i++) {
+        strcat(indent, "  ");
+    }
+    printf("Line %d: %sEntering scope level %d\n", line_number, indent, scope_level);
+}
+
+void exit_scope(void) {
+    char indent[256] = "";
+    for (int i = 0; i < scope_level; i++) {
+        strcat(indent, "  ");
+    }
+    printf("Line %d: %sExiting scope level %d\n", line_number, indent, scope_level);
+    scope_level--;
+    if (scope_level == 0) {
+        current_function[0] = '\0';
+    }
 }

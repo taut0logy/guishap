@@ -4,3 +4,4 @@
 *.out
 *.tab.c
 *.tab.h
+*.output
