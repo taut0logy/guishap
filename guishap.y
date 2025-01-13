@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Structure declarations must come before function declarations
 // Symbol table structure
 typedef struct Symbol {
     char *name;
@@ -36,11 +35,9 @@ typedef struct Collection {
     struct Collection *next;
 } Collection;
 
-// Forward declarations
 Collection *find_collection_type(const char *name);
 Symbol *find_collection_var(const char *name);
 
-// External declarations for lexer variables
 extern int line_number;
 extern char *yytext;
 extern int yylineno;
@@ -50,7 +47,6 @@ extern char current_function[256];
 extern char current_collection[256];
 extern int in_function_params;
 
-// Declaration structure
 typedef struct {
     char *name;
     char *type;
@@ -61,12 +57,10 @@ typedef struct {
     int is_array;
 } Declaration;
 
-// Function to extract declaration info
 Declaration* extract_declaration(const char* decl_str, const char* value, int line_num) {
     Declaration* d = malloc(sizeof(Declaration));
     char* temp = strdup(decl_str);
     
-    // Check if it's an array
     d->is_array = (strstr(temp, "[]") != NULL);
     
     // Split at '%'
@@ -87,11 +81,9 @@ Declaration* extract_declaration(const char* decl_str, const char* value, int li
         d->type = strdup("unknown");
     }
     
-    // Store value and line number
     d->value = value ? strdup(value) : NULL;
     d->line_num = line_num;
     
-    // Store context
     d->function_name = current_function[0] ? strdup(current_function) : NULL;
     d->collection_name = current_collection[0] ? strdup(current_collection) : NULL;
     
@@ -110,23 +102,19 @@ void free_declaration(Declaration* d) {
     }
 }
 
-// Function declarations
 int yylex(void);
 void yyerror(const char *s);
 
-// Global symbol tables
 Symbol *symbol_table = NULL;
 Function *function_table = NULL;
 Collection *collection_table = NULL;
 
-// Statistics
 int declarations = 0;
 int assignments = 0;
 int function_calls = 0;
 int conditions = 0;
 int loops = 0;
 
-// Helper functions
 void enter_scope(void);
 void exit_scope(void);
 void cleanup_temporary_symbols(int scope);
@@ -138,7 +126,6 @@ Function *find_function(const char *name);
 Collection *find_collection(const char *name);
 void print_scope_info(const char *action, const char *details);
 
-// Operation logging functions
 void log_declaration(const char *kind, const char *name, const char *type, const char *value);
 void log_assignment(const char *target, const char *value, const char *type);
 void log_operation(const char *op, const char *left, const char *right, const char *result);
@@ -149,7 +136,6 @@ void log_collection_access(const char *collection, const char *member);
 void log_array_access(const char *array, const char *index);
 void log_case(const char *type, const char *value);
 
-// Helper function to check if a type is valid
 int is_valid_type(const char* type) {
     // Check primitive types
     if (strcmp(type, "int") == 0 || 
@@ -159,8 +145,7 @@ int is_valid_type(const char* type) {
         strcmp(type, "void") == 0) {
         return 1;
     }
-    
-    // Check if it's a defined collection type
+   
     Collection* col = find_collection_type(type);
     if (col) {
         return 1;
@@ -169,7 +154,37 @@ int is_valid_type(const char* type) {
     return 0;
 }
 
-// Rename existing find_collection to find_collection_type for clarity
+// Add function to check for reserved keywords
+int is_reserved_keyword(const char* name) {
+    const char* keywords[] = {
+        "int", "float", "string", "bool", "void",  // Types
+        "col", "shap", "ret",                      // Definition keywords
+        "loop", "till", "for",                     // Loop keywords
+        "break", "continue",                       // Control flow
+        "if", "elif", "else", "case",             // Conditional keywords
+        "true", "false",                          // Boolean literals
+        NULL
+    };
+    
+    for (const char** keyword = keywords; *keyword != NULL; keyword++) {
+        if (strcmp(name, *keyword) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// Helper function to validate identifier name
+int validate_identifier(const char* name, const char* context) {
+    if (is_reserved_keyword(name)) {
+        char error[256];
+        snprintf(error, sizeof(error), "Cannot use reserved keyword '%s' as %s name", name, context);
+        yyerror(error);
+        return 0;
+    }
+    return 1;
+}
+
 Collection *find_collection_type(const char *name) {
     for (Collection *col = collection_table; col != NULL; col = col->next) {
         if (strcmp(col->name, name) == 0) {
@@ -179,7 +194,6 @@ Collection *find_collection_type(const char *name) {
     return NULL;
 }
 
-// Add new function to find collection-typed variables
 Symbol *find_collection_var(const char *name) {
     Symbol *sym = find_symbol(name);
     if (!sym) return NULL;
@@ -267,7 +281,35 @@ statement
     | case_statement                 { $$ = "case"; }
     | BREAK ';'                      { print_scope_info("Break Statement", ""); $$ = "break"; }
     | CONTINUE ';'                   { print_scope_info("Continue Statement", ""); $$ = "continue"; }
-    | RET expression ';'             { print_scope_info("Return Statement", $2); $$ = "return"; }
+    | RET expression ';'             { 
+        if (current_function[0] == '\0') {
+            yyerror("Return statement not allowed outside of function");
+            YYERROR;
+        }
+        Function *func = find_function(current_function);
+        if (func && strcmp(func->return_type, "void") == 0) {
+            yyerror("Cannot return a value from a void function");
+            YYERROR;
+        }
+        print_scope_info("Return Statement", $2); 
+        $$ = "return"; 
+    }
+    | RET ';'                        {
+        if (current_function[0] == '\0') {
+            yyerror("Return statement not allowed outside of function");
+            YYERROR;
+        }
+        Function *func = find_function(current_function);
+        if (func && strcmp(func->return_type, "void") != 0) {
+            char error[256];
+            snprintf(error, sizeof(error), "Function '%s' must return a value of type '%s'", 
+                    current_function, func->return_type);
+            yyerror(error);
+            YYERROR;
+        }
+        print_scope_info("Return Statement", "void"); 
+        $$ = "return"; 
+    }
     | block                          { $$ = $1; }
     | ';'                           { $$ = "empty"; }
     ;
@@ -799,7 +841,7 @@ loop_statement
             log_loop("Loop For", info);
         }
         enter_scope();
-        free($4);  // Free the range expression string
+        free($4);
     } block {
         loops++;
         exit_scope();
@@ -839,7 +881,7 @@ case_item
         log_case("Case Branch", info);
         $$ = "case";
         exit_scope();
-        free($2);  // Free the strdup'd value
+        free($2);
     }
     | '[' ']' { enter_scope(); } block { 
         log_case("Default Case", "");
@@ -868,111 +910,167 @@ case_value
 expression
     : INTEGER                      { char buf[32]; sprintf(buf, "%d", $1); $$ = strdup(buf); }
     | FLOAT                       { char buf[32]; sprintf(buf, "%g", $1); $$ = strdup(buf); }
-    | STRING                      { $$ = $1; }
-    | array_expression            { $$ = $1; }
+    | STRING                      { $$ = strdup($1); }
+    | array_expression            { $$ = strdup($1); }
     | collection_expression       { $$ = $1; }
-    | function_expression         { $$ = $1; }
-    | '(' expression ')'          { $$ = $2; }
-    | expression '+' expression   { log_operation("Addition", $1, $3, "result"); 
-                                        char* result = malloc(strlen($1) + strlen($3) + 2);
-                                        sprintf(result, "%s + %s", $1, $3);
-                                        $$ = result;
-                                    }
-    | expression '-' expression   { log_operation("Subtraction", $1, $3, "result");
-                                        char* result = malloc(strlen($1) + strlen($3) + 2);
-                                        sprintf(result, "%s - %s", $1, $3);
-                                        $$ = result;
-                                    }
-    | expression '*' expression   { log_operation("Multiplication", $1, $3, "result");
-                                        char* result = malloc(strlen($1) + strlen($3) + 2);
-                                        sprintf(result, "%s * %s", $1, $3);
-                                        $$ = result;
-                                    }
-    | expression '/' expression   { log_operation("Division", $1, $3, "result");
-                                        char* result = malloc(strlen($1) + strlen($3) + 2);
-                                        sprintf(result, "%s / %s", $1, $3);
-                                        $$ = result;
-                                    }
-    | expression '%' expression   { log_operation("Modulo", $1, $3, "result");
-                                        char* result = malloc(strlen($1) + strlen($3) + 2);
-                                        sprintf(result, "%s % %s", $1, $3);
-                                        $$ = result;
-                                    }
-    | expression '&' expression   { log_operation("Bitwise AND", $1, $3, "result");
-                                        char* result = malloc(strlen($1) + strlen($3) + 2);
-                                        sprintf(result, "%s & %s", $1, $3);
-                                        $$ = result;
-                                    }
-    | expression '|' expression   { log_operation("Bitwise OR", $1, $3, "result");
-                                        char* result = malloc(strlen($1) + strlen($3) + 2);
-                                        sprintf(result, "%s | %s", $1, $3);
-                                        $$ = result;
-                                    }
-    | expression '^' expression   { log_operation("Bitwise XOR", $1, $3, "result");
-                                        char* result = malloc(strlen($1) + strlen($3) + 2);
-                                        sprintf(result, "%s ^ %s", $1, $3);
-                                        $$ = result;
-                                    }
-    | '~' expression             { log_operation("Bitwise NOT", $2, "", "result");
-                                        char* result = malloc(strlen($2) + 2);
-                                        sprintf(result, "~%s", $2);
-                                        $$ = result;
-                                    }
-    | expression EQ expression    { log_operation("Equals", $1, $3, "result");
-                                        char* result = malloc(strlen($1) + strlen($3) + 2);
-                                        sprintf(result, "%s == %s", $1, $3);
-                                        $$ = result;
-                                        }
-    | expression LT expression    { log_operation("Less Than", $1, $3, "result");
-                                        char* result = malloc(strlen($1) + strlen($3) + 2);
-                                        sprintf(result, "%s < %s", $1, $3);
-                                        $$ = result;
-                                    }
-    | expression GT expression    { log_operation("Greater Than", $1, $3, "result");
-                                        char* result = malloc(strlen($1) + strlen($3) + 2);
-                                        sprintf(result, "%s > %s", $1, $3);
-                                        $$ = result;
-                                    }
-    | expression LE expression    { log_operation("Less Equal", $1, $3, "result"); 
-                                        char* result = malloc(strlen($1) + strlen($3) + 2);
-                                        sprintf(result, "%s <= %s", $1, $3);
-                                        $$ = result;
-                                    }
-    | expression GE expression    { log_operation("Greater Equal", $1, $3, "result");
-                                        char* result = malloc(strlen($1) + strlen($3) + 2);
-                                        sprintf(result, "%s >= %s", $1, $3);
-                                        $$ = result;
-                                    }
-    | expression AND expression   { log_operation("Logical AND", $1, $3, "result");
-                                        char* result = malloc(strlen($1) + strlen($3) + 2);
-                                        sprintf(result, "%s && %s", $1, $3);
-                                        $$ = result;
-                                    }
-    | expression OR expression    { log_operation("Logical OR", $1, $3, "result");
-                                            char* result = malloc(strlen($1) + strlen($3) + 2);
-                                        sprintf(result, "%s || %s", $1, $3);
-                                        $$ = result;
-                                    }
-    | NOT expression             { log_operation("Logical NOT", $2, "", "result");
-                                        char* result = malloc(strlen($2) + 2);
-                                        sprintf(result, "!%s", $2);
-                                        $$ = result;
-                                    }
-    | '-' expression %prec UMINUS { log_operation("Negation", $2, "", "result");
-                                        char* result = malloc(strlen($2) + 2);
-                                        sprintf(result, "-%s", $2);
-                                        $$ = result;
-                                    }
+    | function_expression         { $$ = strdup($1); }
+    | '(' expression ')'          { 
+                                   char* result = malloc(strlen($2) + 3);  // Space for parentheses and null
+                                   sprintf(result, "(%s)", $2);
+                                   free($2);
+                                   $$ = result;
+                                 }
+    | expression '+' expression   { 
+                                   char* result = malloc(strlen($1) + strlen($3) + 4);
+                                   sprintf(result, "%s + %s", $1, $3);
+                                   log_operation("Addition", $1, $3, result);
+                                   free($1);
+                                   free($3);
+                                   $$ = result;
+                                 }
+    | expression '-' expression   { 
+                                   char* result = malloc(strlen($1) + strlen($3) + 4);
+                                   sprintf(result, "%s - %s", $1, $3);
+                                   log_operation("Subtraction", $1, $3, result);
+                                   free($1);
+                                   free($3);
+                                   $$ = result;
+                                 }
+    | expression '*' expression   { 
+                                   char* result = malloc(strlen($1) + strlen($3) + 4);
+                                   sprintf(result, "%s * %s", $1, $3);
+                                   log_operation("Multiplication", $1, $3, result);
+                                   free($1);
+                                   free($3);
+                                   $$ = result;
+                                 }
+    | expression '/' expression   { 
+                                   char* result = malloc(strlen($1) + strlen($3) + 4);
+                                   sprintf(result, "%s / %s", $1, $3);
+                                   log_operation("Division", $1, $3, result);
+                                   free($1);
+                                   free($3);
+                                   $$ = result;
+                                 }
+    | expression '%' expression   { 
+                                   char* result = malloc(strlen($1) + strlen($3) + 4);
+                                   sprintf(result, "%s %% %s", $1, $3);
+                                   log_operation("Modulo", $1, $3, result);
+                                   free($1);
+                                   free($3);
+                                   $$ = result;
+                                 }
+    | expression '&' expression   { 
+                                   char* result = malloc(strlen($1) + strlen($3) + 4);
+                                   sprintf(result, "%s & %s", $1, $3);
+                                   log_operation("Bitwise AND", $1, $3, result);
+                                   free($1);
+                                   free($3);
+                                   $$ = result;
+                                 }
+    | expression '|' expression   { 
+                                   char* result = malloc(strlen($1) + strlen($3) + 4);
+                                   sprintf(result, "%s | %s", $1, $3);
+                                   log_operation("Bitwise OR", $1, $3, result);
+                                   free($1);
+                                   free($3);
+                                   $$ = result;
+                                 }
+    | expression '^' expression   { 
+                                   char* result = malloc(strlen($1) + strlen($3) + 4);
+                                   sprintf(result, "%s ^ %s", $1, $3);
+                                   log_operation("Bitwise XOR", $1, $3, result);
+                                   free($1);
+                                   free($3);
+                                   $$ = result;
+                                 }
+    | '~' expression             { 
+                                   char* result = malloc(strlen($2) + 2);
+                                   sprintf(result, "~%s", $2);
+                                   log_operation("Bitwise NOT", $2, "", result);
+                                   free($2);
+                                   $$ = result;
+                                 }
+    | expression EQ expression    { 
+                                   char* result = malloc(strlen($1) + strlen($3) + 5);
+                                   sprintf(result, "%s == %s", $1, $3);
+                                   log_operation("Equals", $1, $3, result);
+                                   free($1);
+                                   free($3);
+                                   $$ = result;
+                                 }
+    | expression LT expression    { 
+                                   char* result = malloc(strlen($1) + strlen($3) + 4);
+                                   sprintf(result, "%s < %s", $1, $3);
+                                   log_operation("Less Than", $1, $3, result);
+                                   free($1);
+                                   free($3);
+                                   $$ = result;
+                                 }
+    | expression GT expression    { 
+                                   char* result = malloc(strlen($1) + strlen($3) + 4);
+                                   sprintf(result, "%s > %s", $1, $3);
+                                   log_operation("Greater Than", $1, $3, result);
+                                   free($1);
+                                   free($3);
+                                   $$ = result;
+                                 }
+    | expression LE expression    { 
+                                   char* result = malloc(strlen($1) + strlen($3) + 5);
+                                   sprintf(result, "%s <= %s", $1, $3);
+                                   log_operation("Less Equal", $1, $3, result);
+                                   free($1);
+                                   free($3);
+                                   $$ = result;
+                                 }
+    | expression GE expression    { 
+                                   char* result = malloc(strlen($1) + strlen($3) + 5);
+                                   sprintf(result, "%s >= %s", $1, $3);
+                                   log_operation("Greater Equal", $1, $3, result);
+                                   free($1);
+                                   free($3);
+                                   $$ = result;
+                                 }
+    | expression AND expression   { 
+                                   char* result = malloc(strlen($1) + strlen($3) + 5);
+                                   sprintf(result, "%s && %s", $1, $3);
+                                   log_operation("Logical AND", $1, $3, result);
+                                   free($1);
+                                   free($3);
+                                   $$ = result;
+                                 }
+    | expression OR expression    { 
+                                   char* result = malloc(strlen($1) + strlen($3) + 5);
+                                   sprintf(result, "%s || %s", $1, $3);
+                                   log_operation("Logical OR", $1, $3, result);
+                                   free($1);
+                                   free($3);
+                                   $$ = result;
+                                 }
+    | NOT expression             { 
+                                   char* result = malloc(strlen($2) + 2);
+                                   sprintf(result, "!%s", $2);
+                                   log_operation("Logical NOT", $2, "", result);
+                                   free($2);
+                                   $$ = result;
+                                 }
+    | '-' expression %prec UMINUS { 
+                                   char* result = malloc(strlen($2) + 2);
+                                   sprintf(result, "-%s", $2);
+                                   log_operation("Negation", $2, "", result);
+                                   free($2);
+                                   $$ = result;
+                                 }
     | IDENTIFIER                  { 
-        Symbol *sym = find_symbol($1);
-        if (!sym) {
-            char error[256];
-            snprintf(error, sizeof(error), "Undefined identifier '%s'", $1);
-            yyerror(error);
-            YYERROR;
-        }
-        $$ = $1;
-    }
+                                   Symbol *sym = find_symbol($1);
+                                   if (!sym) {
+                                       char error[256];
+                                       snprintf(error, sizeof(error), "Undefined identifier '%s'", $1);
+                                       yyerror(error);
+                                       YYERROR;
+                                   }
+                                   $$ = strdup($1);
+                                 }
     ;
 
 array_expression
@@ -1001,7 +1099,6 @@ array_expression
             yyerror(error);
             YYERROR;
         }
-        // The collection member check is already done in collection_expression
         log_array_access($1, $3);
         $$ = $1;
     }
@@ -1059,7 +1156,7 @@ function_expression
             YYERROR;
         }
         function_calls++;
-        log_function_call($1, 1); // TODO: Count actual arguments
+        log_function_call($1, 1);
         $$ = $1;
     }
     ;
@@ -1081,6 +1178,34 @@ type
 
 %%
 
+int main(int argc, char *argv[]) {
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <input_file>\n", argv[0]);
+        return 1;
+    }
+
+    FILE *input = fopen(argv[1], "r");
+    if (!input) {
+        fprintf(stderr, "Error: Cannot open input file '%s'\n", argv[1]);
+        return 1;
+    }
+
+    yyin = input;
+
+    printf("Parsing file: %s\n\n", argv[1]);
+    int result = yyparse();
+    
+    printf("\n=== Compilation Statistics ===\n");
+    printf("Declarations: %d\n", declarations);
+    printf("Assignments: %d\n", assignments);
+    printf("Function Calls: %d\n", function_calls);
+    printf("Conditions: %d\n", conditions);
+    printf("Loops: %d\n", loops);
+    
+    fclose(input);
+    return result;
+}
+
 void yyerror(const char *s) {
     fprintf(stderr, "Error at line %d: %s\n", line_number, s);
     fprintf(stderr, "Near token: '%s'\n", yytext);
@@ -1093,9 +1218,36 @@ void print_scope_info(const char *action, const char *details) {
     }
     
     char context[512] = "";
-
     
-    printf("Line %d%s: %s%s: %s\n", line_number, context, indent, action, details);
+    printf("Line %-5d%s: %s%s: %s\n", line_number, context, indent, action, details);
+}
+
+void enter_scope(void) {
+    scope_level++;
+    char indent[256] = "";
+    for (int i = 0; i < scope_level; i++) {
+        strcat(indent, "  ");
+    }
+    // printf("Line %-5d: %sEntering scope level %d\n", line_number, indent, scope_level);
+}
+
+void exit_scope(void) {
+    if (scope_level > 0) {
+        cleanup_temporary_symbols(scope_level);  // Clean up temporary symbols before exiting scope
+        scope_level--;
+        char indent[512] = "";
+        for (int i = 0; i < scope_level; i++) strcat(indent, "  ");
+        char context[512] = "";
+        if (current_function[0] != '\0') {
+            snprintf(context, sizeof(context), "", current_function);
+        }
+        // printf("Line %-5d%s: %sExiting scope level %d\n", 
+        //       line_number, context, indent, scope_level + 1);
+        
+        if (scope_level == 0) {
+            current_function[0] = '\0';  // Clear function context at global scope
+        }
+    }
 }
 
 void cleanup_temporary_symbols(int scope) {
@@ -1126,6 +1278,11 @@ void cleanup_temporary_symbols(int scope) {
 }
 
 void add_symbol(const char *name, const char *type, int is_const, int is_array, const char *value, int line_num, int is_temporary) {
+    // Check if name is a reserved keyword
+    if (!validate_identifier(name, "variable")) {
+        return;
+    }
+    
     // For collection members, only check duplicates within the same collection
     if (current_collection[0] != '\0') {
         for (Symbol *sym = symbol_table; sym != NULL; sym = sym->next) {
@@ -1186,7 +1343,6 @@ void add_symbol(const char *name, const char *type, int is_const, int is_array, 
 
     declarations++;
 
-    // Log the declaration
     const char* kind = is_const ? "Constant" : 
                       is_array ? "Array" :
                       in_function_params ? "Parameter" :
@@ -1194,28 +1350,19 @@ void add_symbol(const char *name, const char *type, int is_const, int is_array, 
     log_declaration(kind, name, type, value);
 }
 
-// Modify exit_scope to cleanup temporary symbols
-void exit_scope(void) {
-    if (scope_level > 0) {
-        cleanup_temporary_symbols(scope_level);  // Clean up temporary symbols before exiting scope
-        scope_level--;
-        char indent[512] = "";
-        for (int i = 0; i < scope_level; i++) strcat(indent, "  ");
-        char context[512] = "";
-        if (current_function[0]) {
-            snprintf(context, sizeof(context), " [in function %s]", current_function);
-        }
-        printf("Line %d%s: %sExiting scope level %d\n", 
-               line_number, context, indent, scope_level + 1);
-        
-        if (scope_level == 0) {
-            current_function[0] = '\0';  // Clear function context at global scope
-        }
-    }
-}
-
 void add_function(const char *name, const char *return_type) {
-    // Check for duplicate function
+    // Check if name is a reserved keyword
+    if (!validate_identifier(name, "function")) {
+        return;
+    }
+
+    if(find_collection(name)) {
+        char error[256];
+        snprintf(error, sizeof(error), "Name '%s' is already used as a collection", name);
+        yyerror(error);
+        return;
+    }
+
     if (find_function(name)) {
         char error[256];
         snprintf(error, sizeof(error), "Duplicate function '%s'", name);
@@ -1233,7 +1380,18 @@ void add_function(const char *name, const char *return_type) {
 }
 
 void add_collection(const char *name) {
-    // Check for duplicate collection
+    // Check if name is a reserved keyword
+    if (!validate_identifier(name, "collection")) {
+        return;
+    }
+
+    if(find_function(name)) {
+        char error[256];
+        snprintf(error, sizeof(error), "Name '%s' is already used as a function", name);
+        yyerror(error);
+        return;
+    }
+
     if (find_collection(name)) {
         char error[256];
         snprintf(error, sizeof(error), "Duplicate collection '%s'", name);
@@ -1279,35 +1437,6 @@ Collection *find_collection(const char *name) {
     return NULL;
 }
 
-int main(int argc, char *argv[]) {
-    if (argc != 2) {
-        fprintf(stderr, "Usage: %s <input_file>\n", argv[0]);
-        return 1;
-    }
-
-    FILE *input = fopen(argv[1], "r");
-    if (!input) {
-        fprintf(stderr, "Error: Cannot open input file '%s'\n", argv[1]);
-        return 1;
-    }
-
-    // Set flex to read from input file instead of stdin
-    yyin = input;
-
-    printf("Parsing file: %s\n\n", argv[1]);
-    int result = yyparse();
-    
-    printf("\n=== Compilation Statistics ===\n");
-    printf("Declarations: %d\n", declarations);
-    printf("Assignments: %d\n", assignments);
-    printf("Function Calls: %d\n", function_calls);
-    printf("Conditions: %d\n", conditions);
-    printf("Loops: %d\n", loops);
-    
-    fclose(input);
-    return result;
-}
-
 void log_declaration(const char *kind, const char *name, const char *type, const char *value) {
     char indent[256] = "";
     for (int i = 0; i < scope_level; i++) {
@@ -1315,13 +1444,12 @@ void log_declaration(const char *kind, const char *name, const char *type, const
     }
     
     char context[512] = "";
-
     
     if (value) {
-        printf("Line %d%s: %s%s Declaration: %s of type %s = %s\n", 
+        printf("Line %-5d%s: %s%s Declaration: %s of type %s = %s\n", 
                line_number, context, indent, kind, name, type, value);
     } else {
-        printf("Line %d%s: %s%s Declaration: %s of type %s\n", 
+        printf("Line %-5d%s: %s%s Declaration: %s of type %s\n", 
                line_number, context, indent, kind, name, type);
     }
 }
@@ -1333,9 +1461,8 @@ void log_assignment(const char *target, const char *value, const char *type) {
     }
     
     char context[512] = "";
-
     
-    printf("Line %d%s: %sAssignment: %s = %s (type: %s)\n", 
+    printf("Line %-5d%s: %sAssignment: %s = %s (type: %s)\n", 
            line_number, context, indent, target, value, type);
 }
 
@@ -1346,13 +1473,12 @@ void log_operation(const char *op, const char *left, const char *right, const ch
     }
     
     char context[512] = "";
-
     
     if (right[0] != '\0') {
-        printf("Line %d%s: %sOperation: %s (%s, %s) = %s\n", 
+        printf("Line %-5d%s: %sOperation: %s (%s, %s) = %s\n", 
                line_number, context, indent, op, left, right, result);
     } else {
-        printf("Line %d%s: %sOperation: %s (%s) = %s\n", 
+        printf("Line %-5d%s: %sOperation: %s (%s) = %s\n", 
                line_number, context, indent, op, left, result);
     }
 }
@@ -1363,7 +1489,7 @@ void log_function_call(const char *name, int arg_count) {
         strcat(indent, "  ");
     }
     
-    printf("Line %d: %sFunction Call: %s with %d argument(s)\n", 
+    printf("Line %-5d: %sFunction Call: %s with %d argument(s)\n", 
            line_number, indent, name, arg_count);
 }
 
@@ -1374,10 +1500,10 @@ void log_condition(const char *type, const char *condition) {
     }
     
     if (condition[0] != '\0') {
-        printf("Line %d: %s%s Condition: %s\n", 
+        printf("Line %-5d: %s%s Condition: %s\n", 
                line_number, indent, type, condition);
     } else {
-        printf("Line %d: %s%s Branch\n", 
+        printf("Line %-5d: %s%s Branch\n", 
                line_number, indent, type);
     }
 }
@@ -1388,7 +1514,7 @@ void log_loop(const char *type, const char *condition) {
         strcat(indent, "  ");
     }
     
-    printf("Line %d: %s%s: %s\n", 
+    printf("Line %-5d: %s%s: %s\n", 
            line_number, indent, type, condition);
 }
 
@@ -1398,7 +1524,7 @@ void log_collection_access(const char *collection, const char *member) {
         strcat(indent, "  ");
     }
     
-    printf("Line %d: %sCollection Access: %s.%s\n", 
+    printf("Line %-5d: %sCollection Access: %s.%s\n", 
            line_number, indent, collection, member);
 }
 
@@ -1408,17 +1534,8 @@ void log_array_access(const char *array, const char *index) {
         strcat(indent, "  ");
     }
     
-    printf("Line %d: %sArray Access: %s[%s]\n", 
+    printf("Line %-5d: %sArray Access: %s[%s]\n", 
            line_number, indent, array, index);
-}
-
-void enter_scope(void) {
-    scope_level++;
-    char indent[256] = "";
-    for (int i = 0; i < scope_level; i++) {
-        strcat(indent, "  ");
-    }
-    printf("Line %d: %sEntering scope level %d\n", line_number, indent, scope_level);
 }
 
 void log_case(const char *type, const char *value) {
@@ -1433,10 +1550,10 @@ void log_case(const char *type, const char *value) {
     }
     
     if (value && value[0] != '\0') {
-        printf("Line %d%s: %s%s: %s\n", 
+        printf("Line %-5d%s: %s%s: %s\n", 
                line_number, context, indent, type, value);
     } else {
-        printf("Line %d%s: %s%s\n", 
+        printf("Line %-5d%s: %s%s\n", 
                line_number, context, indent, type);
     }
 }

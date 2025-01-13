@@ -10,7 +10,7 @@ guishap: lex.yy.c guishap.tab.c
 	gcc -o guishap lex.yy.c guishap.tab.c
 
 run: guishap
-	./guishap in.txt
+	./guishap guishap.txt
 
 clean:
 	rm -f guishap lex.yy.c guishap.tab.c guishap.tab.h guishap.output

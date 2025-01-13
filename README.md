@@ -1,5 +1,15 @@
 # Guishap Programming Language Documentation
 
+## Developed by
+
+**Raufun Ahsan**
+
+*Khulna University of Engineering & Technology*
+
+Roll: 2007030
+
+Session: 2020-2021
+
 ## Table of Contents
 
 1. [Introduction](#introduction)
@@ -12,8 +22,6 @@
 8. [Functions](#functions)
 9. [Operators](#operators)
 10. [Comments](#comments)
-11. [Best Practices](#best-practices)
-12. [Examples](#examples)
 
 ## Introduction
 
@@ -23,14 +31,14 @@ Guishap is a statically-typed programming language designed with readability and
 
 ### Key Characteristics
 
-- Statically typed
-- Explicit type declarations
+- Statically typed with explicit type declarations
 - Collection-based custom types
-- Multiple loop constructs
+- Multiple loop constructs (till and for)
 - Case-based pattern matching
 - Clear variable/constant distinction
 - Built-in array support
 - Member access notation
+- Function parameters with default values
 
 ## Syntax and Conventions
 
@@ -39,14 +47,13 @@ Guishap is a statically-typed programming language designed with readability and
 - Variables start with single underscore: `_variableName`
 - Constants start with double underscore: `__CONSTANT_NAME`
 - Collections start with uppercase: `CollectionName`
-- Functions use camelCase: `functionName`
 
 ### Type Declaration Syntax
 
 ```guishap
-_variableName%type
-__CONSTANT_NAME%type
-_arrayName%type[]
+_variableName%type              # Variable declaration
+__CONSTANT_NAME%type           # Constant declaration
+_arrayName%type[]             # Array declaration
 ```
 
 ## Data Types
@@ -56,9 +63,9 @@ _arrayName%type[]
 ```guishap
 int     # Integer values
 float   # Floating-point numbers
-bool    # Boolean values
-char    # Single characters
 string  # Text strings
+bool    # Boolean values
+void    # Used for functions with no return value
 ```
 
 ### Array Types
@@ -71,15 +78,24 @@ _values%float[]    # Float array
 
 ## Variables and Constants
 
-### Variable Declaration
+### Variable Declaration and Initialization
 
 ```guishap
+# Declaration only
+_age%int;
+_name%string;
+
+# Declaration with initialization
 _age%int:25;
 _name%string:"John";
+
+# Array declaration with initialization
 _grades%float[]:[85.5, 90.0, 88.5];
 ```
 
 ### Constant Declaration
+
+Constants must be initialized at declaration:
 
 ```guishap
 __PI%float:3.14159;
@@ -87,16 +103,18 @@ __MAX_STUDENTS%int:100;
 __APP_NAME%string:"Guishap App";
 ```
 
-### Variable Assignment
+### Assignment
 
 ```guishap
-counter:0;        # Assignment uses colon
-total:sum/2;     # Can use expressions
+_counter:0;        # Assignment uses colon
+_total:_sum/2;     # Can use expressions
 ```
 
 ## Collections
 
 ### Defining Collections
+
+Collections are user-defined types that group related data:
 
 ```guishap
 col Student {
@@ -109,60 +127,71 @@ col Student {
 ### Using Collections
 
 ```guishap
-_student%Student:{
-    _name:"Alice",
-    _age:20,
-    _grades:[95.0, 88.5, 92.0]
-};
+# Declare a collection variable
+_student%Student;
+
+# Assign values to members
+_student._name:"John Doe";
+_student._age:20;
+_student._grades:[85.5, 90.0, 88.5];
 ```
 
 ### Member Access
 
 ```guishap
-_studentName:student.name;
-_studentGrades:student.grades;
+_name:_student._name;        # Access a member
+_grade:_student._grades[0];  # Access array member
 ```
 
 ## Control Flow
 
 ### If-Elif-Else Statements
 
+Conditions must be enclosed in square brackets:
+
 ```guishap
-if [score >= 90] {
-    grade:"A";
-} elif [score >= 80] {
-    grade:"B";
+if [_score >= 90.0] {
+    _grade:"A";
+} elif [_score >= 80.0] {
+    _grade:"B";
 } else {
-    grade:"C";
+    _grade:"C";
 }
 ```
 
 ### Case Statements
 
 ```guishap
-case [value] {
-    [1]: result:"One";
-    [2]: result:"Two";
-    []: result:"Other";  # Default case
+case [_score] {
+    [90.0] {
+        ret "A";
+    }
+    [80.0] {
+        ret "B";
+    }
+    [] {                # Default case
+        ret "F";
+    }
 }
 ```
 
 ### Loops
 
-#### Till Loop (Condition-based)
+#### Till Loop (While-style)
 
 ```guishap
-loop till [_counter < 10] {
-    sum:_sum + counter;
-    counter:counter + 1;
+_i%int:0;
+loop till [_i < 5] {
+    _sum:_sum + _scores[_i];
+    _i:_i + 1;
 }
 ```
 
 #### For Loop (Range-based)
 
 ```guishap
-loop _i%int for [0..5..1] {    # start..end..step
-    total:total + array[i];
+loop _i%int for [0..5..1] {    # [start..end..step]
+    _sum:_sum + _scores[_i];
 }
 ```
 
@@ -177,20 +206,38 @@ continue;   # Skip to next iteration
 
 ### Function Declaration
 
+Functions are declared using the `shap` keyword:
+
 ```guishap
-shap calculateAverage (_numbers%float[])>float {
-    _sum%float:0.0;
-    loop _i%int for [0.._length..1] {
-        sum:sum + numbers[i];
-    }
-    ret sum/length;
+shap functionName (parameters)>returnType {
+    # Function body
+}
+```
+
+### Function Parameters
+
+```guishap
+# Regular parameter
+shap print (_message%string)>void {
+    # Function body
+}
+
+# Array parameter
+shap calcAvg (_grades%float[])>float {
+    # Function body
+}
+
+# Parameter with default value
+shap greet (_name%string:"Guest")>void {
+    # Function body
 }
 ```
 
 ### Function Return
 
 ```guishap
-ret value;     # Return value
+ret value;     # Return a value
+ret;          # Return from void function
 ```
 
 ## Operators
@@ -203,7 +250,6 @@ ret value;     # Return value
 *    # Multiplication
 /    # Division
 %    # Modulo
-^    # Power
 ```
 
 ### Comparison Operators
@@ -213,8 +259,15 @@ ret value;     # Return value
 <    # Less than
 >=   # Greater than or equal
 <=   # Less than or equal
-!=   # Not equal
 ==   # Equal
+```
+
+### Logical Operators
+
+```guishap
+&&   # Logical AND
+||   # Logical OR
+!    # Logical NOT
 ```
 
 ### Bitwise Operators
@@ -222,13 +275,14 @@ ret value;     # Return value
 ```guishap
 &    # Bitwise AND
 |    # Bitwise OR
+^    # Bitwise XOR
 ~    # Bitwise NOT
 ```
 
 ### Range Operator
 
 ```guishap
-..   # Range operator (used in loops)
+..   # Range operator (used in for loops)
 ```
 
 ## Comments
