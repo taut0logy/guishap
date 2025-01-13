@@ -15,6 +15,7 @@ typedef struct Symbol {
     int is_const;
     int is_array;
     int scope_level;
+    int is_temporary;     // For function parameters and loop iterators
     struct Symbol *next;
 } Symbol;
 
@@ -128,7 +129,8 @@ int loops = 0;
 // Helper functions
 void enter_scope(void);
 void exit_scope(void);
-void add_symbol(const char *name, const char *type, int is_const, int is_array, const char *value, int line_num);
+void cleanup_temporary_symbols(int scope);
+void add_symbol(const char *name, const char *type, int is_const, int is_array, const char *value, int line_num, int is_temporary);
 void add_function(const char *name, const char *return_type);
 void add_collection(const char *name);
 Symbol *find_symbol(const char *name);
@@ -282,7 +284,7 @@ declaration
         }
         $$.name = d->name;
         $$.type = d->type;
-        add_symbol(d->name, d->type, 0, d->is_array, NULL, line_number);
+        add_symbol(d->name, d->type, 0, d->is_array, NULL, line_number, 0);
         declarations++;
         log_declaration("Variable", d->name, d->type, NULL);
         free_declaration(d);
@@ -298,7 +300,7 @@ declaration
         }
         $$.name = d->name;
         $$.type = d->type;
-        add_symbol(d->name, d->type, 1, d->is_array, NULL, line_number);
+        add_symbol(d->name, d->type, 1, d->is_array, NULL, line_number, 0);
         declarations++;
         log_declaration("Constant", d->name, d->type, NULL);
         free_declaration(d);
@@ -314,7 +316,7 @@ declaration
         }
         $$.name = d->name;
         $$.type = d->type;
-        add_symbol(d->name, d->type, 0, 1, NULL, line_number);
+        add_symbol(d->name, d->type, 0, 1, NULL, line_number, 0);
         declarations++;
         log_declaration("Array", d->name, d->type, NULL);
         free_declaration(d);
@@ -330,7 +332,7 @@ declaration
         }
         $$.name = d->name;
         $$.type = d->type;
-        add_symbol(d->name, d->type, 0, d->is_array, $3, line_number);
+        add_symbol(d->name, d->type, 0, d->is_array, $3, line_number, 0);
         declarations++;
         assignments++;
         log_declaration("Variable", d->name, d->type, $3);
@@ -347,7 +349,7 @@ declaration
         }
         $$.name = d->name;
         $$.type = d->type;
-        add_symbol(d->name, d->type, 1, d->is_array, $3, line_number);
+        add_symbol(d->name, d->type, 1, d->is_array, $3, line_number, 0);
         declarations++;
         assignments++;
         log_declaration("Constant", d->name, d->type, $3);
@@ -371,7 +373,7 @@ declaration
         }
         $$.name = d->name;
         $$.type = d->type;
-        add_symbol(d->name, d->type, 0, 1, "array initializer", line_number);
+        add_symbol(d->name, d->type, 0, 1, "array initializer", line_number, 0);
         declarations++;
         assignments++;
         log_declaration("Array", d->name, d->type, "array initializer");
@@ -402,7 +404,7 @@ member
     : VAR_DECL                     { 
         Declaration* d = extract_declaration($1, NULL, line_number);
         $$ = d->name;
-        add_symbol(d->name, d->type, 0, d->is_array, NULL, line_number);
+        add_symbol(d->name, d->type, 0, d->is_array, NULL, line_number, 0);
         char info[256];
         sprintf(info, "Collection Member: %s of type %s", d->name, d->type);
         print_scope_info("Collection Member", info);
@@ -411,7 +413,7 @@ member
     | ARRAY_DECL                   { 
         Declaration* d = extract_declaration($1, NULL, line_number);
         $$ = d->name;
-        add_symbol(d->name, d->type, 0, 1, NULL, line_number);
+        add_symbol(d->name, d->type, 0, 1, NULL, line_number, 0);
         char info[256];
         sprintf(info, "Collection Array Member: %s of type %s", d->name, d->type);
         print_scope_info("Collection Array Member", info);
@@ -446,7 +448,7 @@ parameter
     : VAR_DECL                     { 
         Declaration* d = extract_declaration($1, NULL, line_number);
         $$ = d->name;
-        add_symbol(d->name, d->type, 0, d->is_array, NULL, line_number);
+        add_symbol(d->name, d->type, 0, d->is_array, NULL, line_number, 1);  // Parameters are temporary
         char info[256];
         sprintf(info, "Parameter: %s of type %s", d->name, d->type);
         print_scope_info("Parameter", info);
@@ -455,7 +457,7 @@ parameter
     | ARRAY_DECL                   { 
         Declaration* d = extract_declaration($1, NULL, line_number);
         $$ = d->name;
-        add_symbol(d->name, d->type, 0, 1, NULL, line_number);
+        add_symbol(d->name, d->type, 0, 1, NULL, line_number, 1);  // Parameters are temporary
         char info[256];
         sprintf(info, "Array Parameter: %s of type %s", d->name, d->type);
         print_scope_info("Array Parameter", info);
@@ -464,7 +466,7 @@ parameter
     | CONST_DECL ASSIGN expression { 
         Declaration* d = extract_declaration($1, $3, line_number);
         $$ = d->name;
-        add_symbol(d->name, d->type, 1, d->is_array, $3, line_number);
+        add_symbol(d->name, d->type, 1, d->is_array, $3, line_number, 1);  // Parameters are temporary
         char info[256];
         sprintf(info, "Constant Parameter: %s of type %s = %s", d->name, d->type, $3);
         print_scope_info("Constant Parameter", info);
@@ -473,7 +475,7 @@ parameter
     | CONST_DECL ASSIGN '[' array_values ']' {
         Declaration* d = extract_declaration($1, NULL, line_number);
         $$ = d->name;
-        add_symbol(d->name, d->type, 1, 1, "array initializer", line_number);
+        add_symbol(d->name, d->type, 1, 1, "array initializer", line_number, 1);  // Parameters are temporary
         char info[256];
         sprintf(info, "Constant Array Parameter: %s of type %s", d->name, d->type);
         print_scope_info("Constant Array Parameter", info);
@@ -772,7 +774,7 @@ loop_statement
     | LOOP VAR_DECL FOR range_expression { 
         // Case 1: Iterator declared in loop
         Declaration* d = extract_declaration($2, NULL, line_number);
-        add_symbol(d->name, d->type, 0, d->is_array, NULL, line_number);
+        add_symbol(d->name, d->type, 0, d->is_array, NULL, line_number, 1);  // Loop iterators are temporary
         char info[512];
         sprintf(info, "Loop Iterator: %s of type %s, %s", d->name, d->type, $4);
         log_loop("Loop For", info);
@@ -1096,7 +1098,34 @@ void print_scope_info(const char *action, const char *details) {
     printf("Line %d%s: %s%s: %s\n", line_number, context, indent, action, details);
 }
 
-void add_symbol(const char *name, const char *type, int is_const, int is_array, const char *value, int line_num) {
+void cleanup_temporary_symbols(int scope) {
+    Symbol *prev = NULL;
+    Symbol *current = symbol_table;
+    
+    while (current != NULL) {
+        if (current->scope_level == scope && current->is_temporary) {
+            Symbol *to_delete = current;
+            if (prev) {
+                prev->next = current->next;
+                current = current->next;
+            } else {
+                symbol_table = current->next;
+                current = symbol_table;
+            }
+            free(to_delete->name);
+            free(to_delete->type);
+            if (to_delete->value) free(to_delete->value);
+            if (to_delete->function_name) free(to_delete->function_name);
+            if (to_delete->collection_name) free(to_delete->collection_name);
+            free(to_delete);
+        } else {
+            prev = current;
+            current = current->next;
+        }
+    }
+}
+
+void add_symbol(const char *name, const char *type, int is_const, int is_array, const char *value, int line_num, int is_temporary) {
     // For collection members, only check duplicates within the same collection
     if (current_collection[0] != '\0') {
         for (Symbol *sym = symbol_table; sym != NULL; sym = sym->next) {
@@ -1130,7 +1159,9 @@ void add_symbol(const char *name, const char *type, int is_const, int is_array, 
     else {
         // For regular variables, check duplicates in current and parent scopes
         for (Symbol *sym = symbol_table; sym != NULL; sym = sym->next) {
-            if (sym->scope_level <= scope_level && strcmp(sym->name, name) == 0) {
+            if (sym->scope_level == scope_level && 
+                strcmp(sym->name, name) == 0 && 
+                !sym->collection_name) {
                 char error[256];
                 snprintf(error, sizeof(error), "Duplicate identifier '%s' in current scope", name);
                 yyerror(error);
@@ -1143,14 +1174,44 @@ void add_symbol(const char *name, const char *type, int is_const, int is_array, 
     sym->name = strdup(name);
     sym->type = strdup(type);
     sym->value = value ? strdup(value) : NULL;
-    sym->line_num = line_num;
     sym->is_const = is_const;
     sym->is_array = is_array;
+    sym->is_temporary = is_temporary;  // Set temporary flag
+    sym->line_num = line_num;
     sym->scope_level = scope_level;
     sym->function_name = current_function[0] ? strdup(current_function) : NULL;
     sym->collection_name = current_collection[0] ? strdup(current_collection) : NULL;
     sym->next = symbol_table;
     symbol_table = sym;
+
+    declarations++;
+
+    // Log the declaration
+    const char* kind = is_const ? "Constant" : 
+                      is_array ? "Array" :
+                      in_function_params ? "Parameter" :
+                      current_collection[0] ? "Member" : "Variable";
+    log_declaration(kind, name, type, value);
+}
+
+// Modify exit_scope to cleanup temporary symbols
+void exit_scope(void) {
+    if (scope_level > 0) {
+        cleanup_temporary_symbols(scope_level);  // Clean up temporary symbols before exiting scope
+        scope_level--;
+        char indent[512] = "";
+        for (int i = 0; i < scope_level; i++) strcat(indent, "  ");
+        char context[512] = "";
+        if (current_function[0]) {
+            snprintf(context, sizeof(context), " [in function %s]", current_function);
+        }
+        printf("Line %d%s: %sExiting scope level %d\n", 
+               line_number, context, indent, scope_level + 1);
+        
+        if (scope_level == 0) {
+            current_function[0] = '\0';  // Clear function context at global scope
+        }
+    }
 }
 
 void add_function(const char *name, const char *return_type) {
@@ -1358,18 +1419,6 @@ void enter_scope(void) {
         strcat(indent, "  ");
     }
     printf("Line %d: %sEntering scope level %d\n", line_number, indent, scope_level);
-}
-
-void exit_scope(void) {
-    char indent[256] = "";
-    for (int i = 0; i < scope_level; i++) {
-        strcat(indent, "  ");
-    }
-    printf("Line %d: %sExiting scope level %d\n", line_number, indent, scope_level);
-    scope_level--;
-    if (scope_level == 0) {
-        current_function[0] = '\0';
-    }
 }
 
 void log_case(const char *type, const char *value) {
