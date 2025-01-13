@@ -14,14 +14,16 @@ Session: 2020-2021
 
 1. [Introduction](#introduction)
 2. [Language Features](#language-features)
-3. [Syntax and Conventions](#syntax-and-conventions)
-4. [Data Types](#data-types)
-5. [Variables and Constants](#variables-and-constants)
-6. [Collections](#collections)
-7. [Control Flow](#control-flow)
-8. [Functions](#functions)
-9. [Operators](#operators)
-10. [Comments](#comments)
+3. [Parser Features](#parser-features)
+4. [Syntax and Conventions](#syntax-and-conventions)
+5. [Data Types](#data-types)
+6. [Variables and Constants](#variables-and-constants)
+7. [Collections](#collections)
+8. [Control Flow](#control-flow)
+9. [Functions](#functions)
+10. [Operators](#operators)
+11. [Best Practices](#best-practices)
+12. [Examples](#examples)
 
 ## Introduction
 
@@ -32,13 +34,90 @@ Guishap is a statically-typed programming language designed with readability and
 ### Key Characteristics
 
 - Statically typed with explicit type declarations
+- Strong type checking with limited type conversion (only between int and float)
 - Collection-based custom types
 - Multiple loop constructs (till and for)
 - Case-based pattern matching
 - Clear variable/constant distinction
-- Built-in array support
+- Built-in array support with type checking
 - Member access notation
-- Function parameters with default values
+- Function parameters with type validation
+- Mandatory main function with int return type
+- Scope-based symbol management
+- Comprehensive error reporting
+
+## Parser Features
+
+### Lexical Analysis
+
+- Recognition of all language keywords and operators
+- Support for numeric literals (integers and floats)
+- String literal handling with proper escaping
+- Identifier validation according to naming conventions
+- Line number tracking for error reporting
+- Comment handling and removal
+
+### Syntax Analysis
+
+- Complete grammar validation
+- Type checking and validation
+  - Basic type compatibility
+  - Array type checking
+  - Collection member type checking
+  - Function parameter type checking
+  - Return type validation
+- Scope management
+  - Symbol table maintenance
+  - Scope-based symbol visibility
+  - Temporary symbol cleanup
+- Error Detection and Reporting
+  - Syntax errors
+  - Type mismatch errors
+  - Undefined symbol errors
+  - Duplicate symbol errors
+  - Invalid array access errors
+  - Function call errors
+  - Return type mismatch errors
+
+### Symbol Management
+
+- Symbol table for variables and constants
+- Function table for tracking function definitions
+- Collection table for user-defined types
+- Scope-based symbol visibility
+- Support for temporary symbols (function parameters)
+
+### Type System
+
+- Basic type validation
+- Array type checking
+- Collection type checking
+- Type compatibility checking
+- Type conversion rules enforcement
+
+### Error Handling
+
+- Detailed error messages with line numbers
+- Context-aware error reporting
+- Type mismatch detection
+- Symbol redefinition detection
+- Invalid operation detection
+- Array bounds checking
+- Function parameter validation
+
+### Output Generation
+
+- Structured output to file (output.txt)
+- Detailed logging of:
+  - Declarations
+  - Assignments
+  - Operations
+  - Function calls
+  - Control flow
+  - Scope changes
+  - Collection access
+  - Array access
+- Compilation statistics
 
 ## Syntax and Conventions
 
@@ -47,6 +126,7 @@ Guishap is a statically-typed programming language designed with readability and
 - Variables start with single underscore: `_variableName`
 - Constants start with double underscore: `__CONSTANT_NAME`
 - Collections start with uppercase: `CollectionName`
+- Function names use camelCase: `functionName`
 
 ### Type Declaration Syntax
 
@@ -75,6 +155,13 @@ _numbers%int[]      # Integer array
 _names%string[]    # String array
 _values%float[]    # Float array
 ```
+
+### Type Compatibility
+
+- Implicit conversion allowed between int and float
+- No other implicit type conversions
+- Array types must match exactly
+- Collection types must match by name
 
 ## Variables and Constants
 
@@ -108,6 +195,7 @@ __APP_NAME%string:"Guishap App";
 ```guishap
 _counter:0;        # Assignment uses colon
 _total:_sum/2;     # Can use expressions
+_grades[0]:95.5;   # Array element assignment
 ```
 
 ## Collections
@@ -227,8 +315,8 @@ shap calcAvg (_grades%float[])>float {
     # Function body
 }
 
-# Parameter with default value
-shap greet (_name%string:"Guest")>void {
+# Multiple parameters
+shap addStudent (_name%string, _age%int, _grades%float[])>void {
     # Function body
 }
 ```
@@ -240,6 +328,15 @@ ret value;     # Return a value
 ret;          # Return from void function
 ```
 
+### Main Function
+
+```guishap
+shap main ()>int {
+    # Program entry point
+    ret 0;
+}
+```
+
 ## Operators
 
 ### Arithmetic Operators
@@ -249,17 +346,18 @@ ret;          # Return from void function
 -    # Subtraction
 *    # Multiplication
 /    # Division
-%    # Modulo
+%    # Modulo (integers only)
 ```
 
 ### Comparison Operators
 
 ```guishap
->    # Greater than
+==   # Equal to
+!=   # Not equal to
 <    # Less than
->=   # Greater than or equal
-<=   # Less than or equal
-==   # Equal
+>    # Greater than
+<=   # Less than or equal to
+>=   # Greater than or equal to
 ```
 
 ### Logical Operators
@@ -273,33 +371,10 @@ ret;          # Return from void function
 ### Bitwise Operators
 
 ```guishap
-&    # Bitwise AND
-|    # Bitwise OR
-^    # Bitwise XOR
-~    # Bitwise NOT
-```
-
-### Range Operator
-
-```guishap
-..   # Range operator (used in for loops)
-```
-
-## Comments
-
-### Line Comments
-
-```guishap
-# This is a single-line comment
-```
-
-### Block Comments
-
-```guishap
-##
-This is a multi-line comment
-It can span multiple lines
-##
+&    # Bitwise AND (integers only)
+|    # Bitwise OR (integers only)
+^    # Bitwise XOR (integers only)
+~    # Bitwise NOT (integers only)
 ```
 
 ## Best Practices

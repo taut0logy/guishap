@@ -1,0 +1,122 @@
+Parsing file: guishap.txt
+
+Line 17   : Variable Declaration: _name of type string = "Hello, World!"
+Line 17   : Variable Declaration: _name of type string = "Hello, World!"
+Line 24   :   Collection Start: Student
+Line 25   :   Member Declaration: _name of type string
+Line 25   :   Collection Member: Collection Member: _name of type string
+Line 26   :   Member Declaration: _age of type int
+Line 26   :   Collection Member: Collection Member: _age of type int
+Line 27   :   Array Declaration: _grades of type float
+Line 27   :   Collection Array Member: Collection Array Member: _grades of type float
+Line 28   :   Collection End: Student
+Line 31   : Constant Declaration: __PI of type float = 3.14159
+Line 31   : Constant Declaration: __PI of type float = 3.14159
+Line 32   : Constant Declaration: __MAX_STUDENTS of type int = 100
+Line 32   : Constant Declaration: __MAX_STUDENTS of type int = 100
+Line 41   :   Function Start: calcAvg
+Line 41   :   Array Declaration: _grades of type float
+Line 41   :   Array Parameter: Array Parameter: _grades of type float
+Line 42   :     Variable Declaration: _sum of type float = 0
+Line 42   :     Variable Declaration: _sum of type float = 0
+Line 43   :     Variable Declaration: _count of type int = 0
+Line 43   :     Variable Declaration: _count of type int = 0
+Line 45   :     Variable Declaration: _i of type int
+Line 45   :     Loop For: Loop Iterator: _i of type int, Range: from 0 to 5, step 1
+Line 46   :         Array Access: _grades[_i]
+Line 46   :         Operation: Addition (_sum, _grades[_i]) = _sum + _grades[_i]
+Line 46   :         Assignment: _sum = _sum + _grades[_i] (type: float)
+Line 47   :         Operation: Addition (_count, 1) = _count + 1
+Line 47   :         Assignment: _count = _count + 1 (type: int)
+Line 50   :     Operation: Division (_sum, _count) = _sum / _count
+Line 50   :     Return Statement: _sum / _count
+Line 51   :   Function End: calcAvg
+Line 62   :   Function Start: print
+Line 62   :   Parameter Declaration: _message of type string
+Line 62   :   Parameter: Parameter: _message of type string
+Line 64   :   Function End: print
+Line 66   :   Function Start: getGrade
+Line 66   :   Parameter Declaration: _score of type float
+Line 66   :   Parameter: Parameter: _score of type float
+Line 67   :     Case Switch Condition: _score
+Line 69   :         Return Statement: "A"
+Line 70   :       Case Branch: Case Value: 90.0
+Line 72   :         Return Statement: "B"
+Line 73   :       Case Branch: Case Value: 80.0
+Line 75   :         Return Statement: "C"
+Line 76   :       Case Branch: Case Value: 70.0
+Line 78   :         Return Statement: "D"
+Line 79   :       Case Branch: Case Value: 60.0
+Line 81   :         Return Statement: "F"
+Line 82   :       Default Case
+Line 83   :     Case End: 
+Line 84   :   Function End: getGrade
+Line 92   :   Function Start: main
+Line 94   :     Variable Declaration: _student of type Student
+Line 94   :     Variable Declaration: _student of type Student
+Line 96   :     Collection Access: _student._name
+Line 96   :     Assignment: _name = "John Doe" (type: string)
+Line 97   :     Collection Access: _student._age
+Line 97   :     Assignment: _age = 20 (type: int)
+Line 98   :     Collection Access: _student._grades
+Line 98   :     Assignment: _grades = array values (type: float)
+Line 100  :     Variable Declaration: _average of type float = 0
+Line 100  :     Variable Declaration: _average of type float = 0
+Line 101  :     Variable Declaration: _grade of type string = ""
+Line 101  :     Variable Declaration: _grade of type string = ""
+Line 103  :     Collection Access: _student._grades
+Line 103  :     Function Call: calcAvg with 1 argument(s)
+Line 103  :     Assignment: _average = calcAvg(_student._grades) (type: float)
+Line 105  :     Function Call: getGrade with 1 argument(s)
+Line 105  :     Assignment: _grade = getGrade(_average) (type: string)
+Line 107  :     Variable Declaration: _message of type string
+Line 107  :     Variable Declaration: _message of type string
+Line 110  :     Operation: Greater Equal (_average, 90) = _average >= 90
+Line 110  :     If Condition: _average >= 90
+Line 112  :         Assignment: _message = "Excellent performance!" (type: string)
+Line 113  :         Function Call: print with 1 argument(s)
+Line 114  :     Operation: Greater Equal (_average, 80) = _average >= 80
+Line 114  :     Elif Condition: _average >= 80
+Line 115  :         Assignment: _message = "Good job!" (type: string)
+Line 116  :         Function Call: print with 1 argument(s)
+Line 117  :     Else Branch
+Line 118  :         Assignment: _message = "Keep working hard!" (type: string)
+Line 119  :         Function Call: print with 1 argument(s)
+Line 123  :     Array Declaration: _scores of type float = array initializer
+Line 123  :     Array Declaration: _scores of type float = array initializer
+Line 124  :     Variable Declaration: _summ of type float = 0
+Line 124  :     Variable Declaration: _summ of type float = 0
+Line 127  :     Variable Declaration: _i of type int = 0
+Line 127  :     Variable Declaration: _i of type int = 0
+Line 128  :     Operation: Less Than (_i, 5) = _i < 5
+Line 128  :     Loop Till: _i < 5
+Line 129  :         Array Access: _scores[_i]
+Line 129  :         Operation: Addition (_summ, _scores[_i]) = _summ + _scores[_i]
+Line 129  :         Assignment: _summ = _summ + _scores[_i] (type: float)
+Line 130  :         Operation: Addition (_i, 1) = _i + 1
+Line 130  :         Assignment: _i = _i + 1 (type: int)
+Line 135  :     Variable Declaration: _flags of type int = 5
+Line 135  :     Variable Declaration: _flags of type int = 5
+Line 136  :     Variable Declaration: _mask of type int = 3
+Line 136  :     Variable Declaration: _mask of type int = 3
+Line 137  :     Operation: Bitwise AND (_flags, _mask) = _flags & _mask
+Line 137  :     Variable Declaration: _result of type int = _flags & _mask
+Line 137  :     Variable Declaration: _result of type int = _flags & _mask
+Line 140  :     Variable Declaration: _radius of type float = 5
+Line 140  :     Variable Declaration: _radius of type float = 5
+Line 141  :     Operation: Multiplication (__PI, _radius) = __PI * _radius
+Line 141  :     Operation: Multiplication (__PI * _radius, _radius) = __PI * _radius * _radius
+Line 141  :     Variable Declaration: _circle_area of type float = __PI * _radius * _radius
+Line 141  :     Variable Declaration: _circle_area of type float = __PI * _radius * _radius
+Line 142  :     Operation: Modulo (17, 5) = 17 % 5
+Line 142  :     Variable Declaration: _remainder of type int = 17 % 5
+Line 142  :     Variable Declaration: _remainder of type int = 17 % 5
+Line 144  :     Return Statement: 0
+Line 145  :   Function End: main
+
+=== Compilation Statistics ===
+Declarations: 43
+Assignments: 28
+Function Calls: 5
+Conditions: 1
+Loops: 2

@@ -2,6 +2,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
+
+// Add global file pointer for output
+FILE* output_file = NULL;
 
 // Symbol table structure
 typedef struct Symbol {
@@ -205,6 +209,261 @@ Symbol *find_collection_var(const char *name) {
     return sym;
 }
 
+int are_types_compatible(const char* type1, const char* type2) {
+    if (!type1 || !type2) return 0;
+    if (strcmp(type1, type2) == 0) return 1;
+    
+    // Allow int to float and float to int conversion
+    if ((strcmp(type1, "int") == 0 && strcmp(type2, "float") == 0) ||
+        (strcmp(type1, "float") == 0 && strcmp(type2, "int") == 0)) {
+        return 1;
+    }
+    
+    return 0;
+}
+
+char* get_result_type(const char* op, const char* type1, const char* type2) {
+    if (!type1 || !type2) return NULL;
+    
+    // Arithmetic operators
+    if (strcmp(op, "+") == 0 || strcmp(op, "-") == 0 || 
+        strcmp(op, "*") == 0 || strcmp(op, "/") == 0) {
+        if (strcmp(type1, "string") == 0 || strcmp(type2, "string") == 0) {
+            return NULL;  // String arithmetic not allowed
+        }
+        if (strcmp(type1, "float") == 0 || strcmp(type2, "float") == 0) {
+            return "float";
+        }
+        return "int";
+    }
+    
+    // Modulo operator
+    if (strcmp(op, "%") == 0) {
+        if (strcmp(type1, "int") == 0 && strcmp(type2, "int") == 0) {
+            return "int";
+        }
+        return NULL;  // Modulo only works with integers
+    }
+    
+    // Comparison operators
+    if (strcmp(op, "==") == 0 || strcmp(op, "<") == 0 || 
+        strcmp(op, ">") == 0 || strcmp(op, "<=") == 0 || 
+        strcmp(op, ">=") == 0) {
+        if (are_types_compatible(type1, type2)) {
+            return "bool";
+        }
+        return NULL;
+    }
+    
+    // Logical operators
+    if (strcmp(op, "&&") == 0 || strcmp(op, "||") == 0) {
+        if (strcmp(type1, "bool") == 0 && strcmp(type2, "bool") == 0) {
+            return "bool";
+        }
+        return NULL;
+    }
+    
+    // Bitwise operators
+    if (strcmp(op, "&") == 0 || strcmp(op, "|") == 0 || strcmp(op, "^") == 0) {
+        if (strcmp(type1, "int") == 0 && strcmp(type2, "int") == 0) {
+            return "int";
+        }
+        return NULL;
+    }
+    
+    return NULL;
+}
+
+
+// Type checking helper functions
+char* get_expression_type(const char* expr) {
+    if (!expr) {
+        return NULL;
+    }
+    
+    // Trim leading and trailing whitespace
+    while (*expr && isspace(*expr)) expr++;
+    if (!*expr) return NULL;
+    
+    // Check if it's a literal
+    if (expr[0] == '"') {
+        return strdup("string");
+    }
+    
+    // Check if it's a compound expression with operators
+    char* plus = strstr(expr, " + ");
+    char* minus = strstr(expr, " - ");
+    char* mult = strstr(expr, " * ");
+    char* div = strstr(expr, " / ");
+    char* mod = strstr(expr, " % ");
+    char* and = strstr(expr, " && ");
+    char* or = strstr(expr, " || ");
+    char* eq = strstr(expr, " == ");
+    char* lt = strstr(expr, " < ");
+    char* gt = strstr(expr, " > ");
+    char* le = strstr(expr, " <= ");
+    char* ge = strstr(expr, " >= ");
+    char* bitand = strstr(expr, " & ");
+    char* bitor = strstr(expr, " | ");
+    char* bitxor = strstr(expr, " ^ ");
+    
+    if (plus || minus || mult || div || mod || and || or || eq || lt || gt || le || ge || 
+        bitand || bitor || bitxor) {
+        // Find the leftmost operator
+        char* operator_pos = NULL;
+        char* op = NULL;
+        
+        if (plus && (!operator_pos || plus < operator_pos)) { operator_pos = plus; op = "+"; }
+        if (minus && (!operator_pos || minus < operator_pos)) { operator_pos = minus; op = "-"; }
+        if (mult && (!operator_pos || mult < operator_pos)) { operator_pos = mult; op = "*"; }
+        if (div && (!operator_pos || div < operator_pos)) { operator_pos = div; op = "/"; }
+        if (mod && (!operator_pos || mod < operator_pos)) { operator_pos = mod; op = "%"; }
+        if (and && (!operator_pos || and < operator_pos)) { operator_pos = and; op = "&&"; }
+        if (or && (!operator_pos || or < operator_pos)) { operator_pos = or; op = "||"; }
+        if (eq && (!operator_pos || eq < operator_pos)) { operator_pos = eq; op = "=="; }
+        if (le && (!operator_pos || le < operator_pos)) { operator_pos = le; op = "<="; }
+        if (ge && (!operator_pos || ge < operator_pos)) { operator_pos = ge; op = ">="; }
+        if (lt && (!operator_pos || lt < operator_pos)) { operator_pos = lt; op = "<"; }
+        if (gt && (!operator_pos || gt < operator_pos)) { operator_pos = gt; op = ">"; }
+        if (bitand && (!operator_pos || bitand < operator_pos)) { operator_pos = bitand; op = "&"; }
+        if (bitor && (!operator_pos || bitor < operator_pos)) { operator_pos = bitor; op = "|"; }
+        if (bitxor && (!operator_pos || bitxor < operator_pos)) { operator_pos = bitxor; op = "^"; }
+        
+        if (operator_pos) {
+            // Split at the operator position
+            char* expr_copy = strdup(expr);
+            operator_pos = expr_copy + (operator_pos - expr);  // Adjust pointer to the copy
+            *operator_pos = '\0';
+            char* left = expr_copy;
+            char* right = operator_pos + strlen(op) + 1;  // +1 for the space
+            
+            // Trim whitespace from operands
+            while (*right && isspace(*right)) right++;
+            char* end = left + strlen(left) - 1;
+            while (end > left && isspace(*end)) {
+                *end = '\0';
+                end--;
+            }
+            
+            // Get types of operands
+            char* left_type = get_expression_type(left);
+            char* right_type = get_expression_type(right);
+            
+            // Get result type
+            char* result_type = get_result_type(op, left_type, right_type);
+            
+            free(expr_copy);
+            if (left_type) free(left_type);
+            if (right_type) free(right_type);
+            return result_type;
+        }
+    }
+    
+    // Check if it's an array access (expression contains '[')
+    char* bracket = strchr(expr, '[');
+    if (bracket) {
+        // Extract array name and index
+        char* array_expr = strdup(expr);
+        char* bracket_pos = strchr(array_expr, '[');
+        if (!bracket_pos) {
+            free(array_expr);
+            return NULL;
+        }
+        *bracket_pos = '\0';
+        
+        // Trim whitespace from array name
+        char* array_name = array_expr;
+        while (*array_name && isspace(*array_name)) array_name++;
+        char* end = array_name + strlen(array_name) - 1;
+        while (end > array_name && isspace(*end)) {
+            *end = '\0';
+            end--;
+        }
+        
+        // Handle collection member array access (e.g., "obj.member[idx]")
+        char* dot = strchr(array_name, '.');
+        if (dot) {
+            *dot = '\0';
+            Symbol* col_var = find_collection_var(array_name);
+            if (col_var) {
+                Collection* col_type = find_collection_type(col_var->type);
+                if (col_type) {
+                    char* member_name = dot + 1;
+                    // Trim whitespace from member name
+                    while (*member_name && isspace(*member_name)) member_name++;
+                    end = member_name + strlen(member_name) - 1;
+                    while (end > member_name && isspace(*end)) {
+                        *end = '\0';
+                        end--;
+                    }
+                    
+                    for (Symbol* s = symbol_table; s != NULL; s = s->next) {
+                        if (s->collection_name && strcmp(s->collection_name, col_type->name) == 0 && 
+                            strcmp(s->name, member_name) == 0) {
+                            char* base_type = strdup(s->type);
+                            free(array_expr);
+                            return base_type;
+                        }
+                    }
+                }
+            }
+        } else {
+            // Regular array access
+            Symbol* sym = find_symbol(array_name);
+            if (sym) {
+                if (sym->is_array) {
+                    char* base_type = strdup(sym->type);
+                    free(array_expr);
+                    return base_type;
+                }
+            }
+        }
+        free(array_expr);
+        return NULL;
+    }
+    
+    // Check if it's a float literal
+    if (strchr(expr, '.')) {
+        char* endptr;
+        strtof(expr, &endptr);
+        if (*endptr == '\0') {
+            return strdup("float");
+        }
+    }
+    
+    // Check if it's an integer literal
+    char* endptr;
+    strtol(expr, &endptr, 10);
+    if (*endptr == '\0') {
+        return strdup("int");
+    }
+    
+    // Check if it's an identifier
+    Symbol* sym = find_symbol(expr);
+    if (sym) {
+        return strdup(sym->type);
+    }
+    
+    // Check if it's a function call (expression contains parentheses)
+    if (strchr(expr, '(')) {
+        char* func_name = strdup(expr);
+        char* paren = strchr(func_name, '(');
+        if (!paren) {
+            free(func_name);
+            return NULL;
+        }
+        *paren = '\0';
+        Function* func = find_function(func_name);
+        free(func_name);
+        if (func) {
+            return strdup(func->return_type);
+        }
+    }
+    
+    return NULL;
+}
+
+
 %}
 
 %union {
@@ -242,9 +501,9 @@ Symbol *find_collection_var(const char *name) {
 %type <decl> declaration
 %type <sval> member_list member parameter_list parameter
 %type <sval> block case_list case_item case_value argument_list
-%type <sval> assignment collection_init member_assignments member_assignment array_values
-%type <sval> array_expression collection_expression function_expression
-%type <sval> range_expression
+%type <sval> assignment array_init member_assignments member_assignment
+%type <sval> array_expression collection_expression function_expression collection_init
+%type <sval> range_expression array_values_list
 
 /* Operator precedence */
 %left OR
@@ -262,7 +521,24 @@ Symbol *find_collection_var(const char *name) {
 %%
 
 program
-    : statement_list
+    : statement_list {
+        // Check if main function exists
+        Function* main_func = find_function("main");
+        if (!main_func) {
+            yyerror("Error: main function not defined");
+            YYERROR;
+        }
+        // Check if main function has the correct return type (int)
+        if (strcmp(main_func->return_type, "int") != 0) {
+            yyerror("Error: main function must have int return type");
+            YYERROR;
+        }
+        // Check if main function has no parameters
+        if (main_func->params != NULL) {
+            yyerror("Error: main function cannot have parameters");
+            YYERROR;
+        }
+    }
     ;
 
 statement_list
@@ -287,10 +563,30 @@ statement
             YYERROR;
         }
         Function *func = find_function(current_function);
-        if (func && strcmp(func->return_type, "void") == 0) {
+        if (!func) {
+            char error[256];
+            snprintf(error, sizeof(error), "Internal error: current function '%s' not found", current_function);
+            yyerror(error);
+            YYERROR;
+        }
+        if (strcmp(func->return_type, "void") == 0) {
             yyerror("Cannot return a value from a void function");
             YYERROR;
         }
+        
+        char* expr_type = get_expression_type($2);
+               
+        if (!are_types_compatible(func->return_type, expr_type)) {
+            char error[256];
+            snprintf(error, sizeof(error), 
+                    "Type mismatch in return statement: cannot return '%s' from function returning '%s'",
+                    expr_type ? expr_type : "unknown", func->return_type);
+            if (expr_type) free(expr_type);
+            yyerror(error);
+            YYERROR;
+        }
+        if (expr_type) free(expr_type);
+        
         print_scope_info("Return Statement", $2); 
         $$ = "return"; 
     }
@@ -300,9 +596,16 @@ statement
             YYERROR;
         }
         Function *func = find_function(current_function);
-        if (func && strcmp(func->return_type, "void") != 0) {
+        if (!func) {
             char error[256];
-            snprintf(error, sizeof(error), "Function '%s' must return a value of type '%s'", 
+            snprintf(error, sizeof(error), "Internal error: current function '%s' not found", current_function);
+            yyerror(error);
+            YYERROR;
+        }
+        if (strcmp(func->return_type, "void") != 0) {
+            char error[256];
+            snprintf(error, sizeof(error), 
+                    "Type mismatch in return statement: function '%s' must return a value of type '%s'", 
                     current_function, func->return_type);
             yyerror(error);
             YYERROR;
@@ -372,6 +675,19 @@ declaration
             free_declaration(d);
             YYERROR;
         }
+        
+        // Check value type
+        char* value_type = get_expression_type($3);
+        if (!are_types_compatible(d->type, value_type)) {
+            char error[256];
+            snprintf(error, sizeof(error), 
+                    "Type mismatch in initialization: cannot assign '%s' to variable of type '%s'",
+                    value_type ? value_type : "unknown", d->type);
+            yyerror(error);
+            free_declaration(d);
+            YYERROR;
+        }
+        
         $$.name = d->name;
         $$.type = d->type;
         add_symbol(d->name, d->type, 0, d->is_array, $3, line_number, 0);
@@ -389,6 +705,19 @@ declaration
             free_declaration(d);
             YYERROR;
         }
+        
+        // Check value type
+        char* value_type = get_expression_type($3);
+        if (!are_types_compatible(d->type, value_type)) {
+            char error[256];
+            snprintf(error, sizeof(error), 
+                    "Type mismatch in initialization: cannot assign '%s' to constant of type '%s'",
+                    value_type ? value_type : "unknown", d->type);
+            yyerror(error);
+            free_declaration(d);
+            YYERROR;
+        }
+        
         $$.name = d->name;
         $$.type = d->type;
         add_symbol(d->name, d->type, 1, d->is_array, $3, line_number, 0);
@@ -397,7 +726,7 @@ declaration
         log_declaration("Constant", d->name, d->type, $3);
         free_declaration(d);
     }
-    | ARRAY_DECL ASSIGN '[' array_values ']' {
+    | ARRAY_DECL ASSIGN '[' array_values_list ']' {
         Declaration* d = extract_declaration($1, NULL, line_number);
         if (!is_valid_type(d->type)) {
             char error[256];
@@ -408,7 +737,8 @@ declaration
         }
         if (!d->is_array) {
             char error[256];
-            snprintf(error, sizeof(error), "Cannot initialize non-array variable '%s' with array values", d->name);
+            snprintf(error, sizeof(error), 
+                    "Cannot initialize non-array variable '%s' with array values", d->name);
             yyerror(error);
             free_declaration(d);
             YYERROR;
@@ -467,15 +797,35 @@ function_definition
     : SHAP IDENTIFIER { 
         enter_scope(); 
         strncpy(current_function, $2, sizeof(current_function)-1);
+        current_function[sizeof(current_function)-1] = '\0';  // Ensure null termination
         print_scope_info("Function Start", $2);
         in_function_params = 1;  // Set when starting parameter list
     }
     '(' parameter_list ')' { 
         in_function_params = 0;  // Clear after parameter list
-    } '>' type block {
+    } '>' type {
+        // Add function to table before processing block
         add_function($2, $9);
+        // Link parameters to function
+        Function* func = find_function($2);
+        if (func) {
+            // Find all parameters for this function and link them
+            for (Symbol* sym = symbol_table; sym != NULL; sym = sym->next) {
+                if (sym->function_name && strcmp(sym->function_name, $2) == 0 && 
+                    sym->is_temporary && sym->scope_level == scope_level) {
+                    // Add parameter to function's parameter list
+                    Symbol* param = malloc(sizeof(Symbol));
+                    param->name = strdup(sym->name);
+                    param->type = strdup(sym->type);
+                    param->is_array = sym->is_array;
+                    param->next = func->params;
+                    func->params = param;
+                }
+            }
+        }
+    } block {
         print_scope_info("Function End", $2);
-        current_function[0] = '\0';
+        current_function[0] = '\0';  // Clear function context
         exit_scope();
     }
     ;
@@ -514,7 +864,7 @@ parameter
         print_scope_info("Constant Parameter", info);
         free_declaration(d);
     }
-    | CONST_DECL ASSIGN '[' array_values ']' {
+    | CONST_DECL ASSIGN '[' array_values_list ']' {
         Declaration* d = extract_declaration($1, NULL, line_number);
         $$ = d->name;
         add_symbol(d->name, d->type, 1, 1, "array initializer", line_number, 1);  // Parameters are temporary
@@ -545,9 +895,22 @@ assignment
         if (sym) {
             if (sym->is_const) {
                 yyerror("Cannot assign to constant");
+                YYERROR;
             } else if (sym->is_array) {
                 yyerror("Cannot assign scalar value to array");
+                YYERROR;
             } else {
+                char* expr_type = get_expression_type($3);
+                if (!are_types_compatible(sym->type, expr_type)) {
+                    char error[256];
+                    snprintf(error, sizeof(error), 
+                            "Type mismatch in assignment: cannot assign '%s' to variable of type '%s'",
+                            expr_type ? expr_type : "unknown", sym->type);
+                    if (expr_type) free(expr_type);
+                    yyerror(error);
+                    YYERROR;
+                }
+                if (expr_type) free(expr_type);
                 // Update the symbol's value
                 if (sym->value) free(sym->value);
                 sym->value = strdup($3);
@@ -558,6 +921,7 @@ assignment
             char error[256];
             snprintf(error, sizeof(error), "Undefined variable '%s'", $1);
             yyerror(error);
+            YYERROR;
         }
         $$ = "assignment";
     }
@@ -568,16 +932,85 @@ assignment
                 char error[256];
                 snprintf(error, sizeof(error), "'%s' is not an array", $1);
                 yyerror(error);
-            } else {
-                assignments++;
-                log_array_access($1, $3);
-                log_assignment($1, $6, sym->type);
+                YYERROR;
             }
+            
+            // Check index type
+            char* index_type = get_expression_type($3);
+            if (!index_type || strcmp(index_type, "int") != 0) {
+                char error[256];
+                snprintf(error, sizeof(error), "Array index must be integer, got '%s'", 
+                        index_type ? index_type : "unknown");
+                if (index_type) free(index_type);
+                yyerror(error);
+                YYERROR;
+            }
+            if (index_type) free(index_type);
+            
+            // Check value type
+            char* value_type = get_expression_type($6);
+            if (!are_types_compatible(sym->type, value_type)) {
+                char error[256];
+                snprintf(error, sizeof(error), 
+                        "Type mismatch in array assignment: cannot assign '%s' to array of type '%s'",
+                        value_type ? value_type : "unknown", sym->type);
+                if (value_type) free(value_type);
+                yyerror(error);
+                YYERROR;
+            }
+            if (value_type) free(value_type);
+            
+            assignments++;
+            log_array_access($1, $3);
+            log_assignment($1, $6, sym->type);
         } else {
             char error[256];
             snprintf(error, sizeof(error), "Undefined array '%s'", $1);
             yyerror(error);
+            YYERROR;
         }
+        $$ = "array_assignment";
+    }
+    | IDENTIFIER ASSIGN '[' array_values_list ']' {
+        Symbol *sym = find_symbol($1);
+        if (!sym) {
+            char error[256];
+            snprintf(error, sizeof(error), "Undefined variable '%s'", $1);
+            yyerror(error);
+            YYERROR;
+        }
+        if (!sym->is_array) {
+            char error[256];
+            snprintf(error, sizeof(error), "Variable '%s' is not an array", $1);
+            yyerror(error);
+            YYERROR;
+        }
+        
+        // Check each array value's type
+        char* values_copy = strdup($4);
+        char* value = strtok(values_copy, ",");
+        while (value) {
+            // Skip whitespace
+            while (*value && isspace(*value)) value++;
+            
+            char* value_type = get_expression_type(value);
+            if (!are_types_compatible(sym->type, value_type)) {
+                char error[256];
+                snprintf(error, sizeof(error), 
+                        "Type mismatch in array initialization: cannot assign '%s' to array of type '%s'",
+                        value_type ? value_type : "unknown", sym->type);
+                if (value_type) free(value_type);
+                free(values_copy);
+                yyerror(error);
+                YYERROR;
+            }
+            if (value_type) free(value_type);
+            value = strtok(NULL, ",");
+        }
+        free(values_copy);
+        
+        assignments++;
+        log_assignment($1, $4, sym->type);
         $$ = "array_assignment";
     }
     | IDENTIFIER '.' IDENTIFIER ASSIGN expression {
@@ -590,7 +1023,8 @@ assignment
                 yyerror(error);
             } else {
                 char error[256];
-                snprintf(error, sizeof(error), "Variable '%s' of type '%s' is not a collection", $1, var->type);
+                snprintf(error, sizeof(error), "Variable '%s' of type '%s' is not a collection", 
+                        $1, var->type);
                 yyerror(error);
             }
             YYERROR;
@@ -598,32 +1032,41 @@ assignment
         
         // Check if member exists in collection type
         Collection *col_type = find_collection_type(sym->type);
-        int found = 0;
         Symbol *member = NULL;
         for (Symbol *s = symbol_table; s != NULL; s = s->next) {
             if (s->collection_name && strcmp(s->collection_name, col_type->name) == 0 && 
                 strcmp(s->name, $3) == 0) {
-                found = 1;
                 member = s;
                 break;
             }
         }
-        if (!found) {
+        if (!member) {
             char error[256];
-            snprintf(error, sizeof(error), "Member '%s' not found in collection type '%s'", $3, sym->type);
+            snprintf(error, sizeof(error), "Member '%s' not found in collection type '%s'", 
+                    $3, sym->type);
             yyerror(error);
             YYERROR;
         }
-        if (member->is_array) {
-            yyerror("Cannot assign scalar value to array member");
+        
+        // Check value type
+        char* value_type = get_expression_type($5);
+        if (!are_types_compatible(member->type, value_type)) {
+            char error[256];
+            snprintf(error, sizeof(error), 
+                    "Type mismatch in member assignment: cannot assign '%s' to member of type '%s'",
+                    value_type ? value_type : "unknown", member->type);
+            if (value_type) free(value_type);
+            yyerror(error);
             YYERROR;
         }
+        if (value_type) free(value_type);
+        
         assignments++;
         log_collection_access($1, $3);
         log_assignment($3, $5, member->type);
         $$ = "member_assignment";
     }
-    | IDENTIFIER '.' IDENTIFIER ASSIGN '[' array_values ']' {
+    | IDENTIFIER '.' IDENTIFIER ASSIGN array_init {
         Symbol *sym = find_collection_var($1);
         if (!sym) {
             Symbol *var = find_symbol($1);
@@ -633,7 +1076,8 @@ assignment
                 yyerror(error);
             } else {
                 char error[256];
-                snprintf(error, sizeof(error), "Variable '%s' of type '%s' is not a collection", $1, var->type);
+                snprintf(error, sizeof(error), "Variable '%s' of type '%s' is not a collection", 
+                        $1, var->type);
                 yyerror(error);
             }
             YYERROR;
@@ -641,19 +1085,18 @@ assignment
         
         // Check if member exists in collection type
         Collection *col_type = find_collection_type(sym->type);
-        int found = 0;
         Symbol *member = NULL;
         for (Symbol *s = symbol_table; s != NULL; s = s->next) {
             if (s->collection_name && strcmp(s->collection_name, col_type->name) == 0 && 
                 strcmp(s->name, $3) == 0) {
-                found = 1;
                 member = s;
                 break;
             }
         }
-        if (!found) {
+        if (!member) {
             char error[256];
-            snprintf(error, sizeof(error), "Member '%s' not found in collection type '%s'", $3, sym->type);
+            snprintf(error, sizeof(error), "Member '%s' not found in collection type '%s'", 
+                    $3, sym->type);
             yyerror(error);
             YYERROR;
         }
@@ -663,10 +1106,29 @@ assignment
             yyerror(error);
             YYERROR;
         }
+        
         assignments++;
         log_collection_access($1, $3);
         log_assignment($3, "array values", member->type);
-        $$ = "array_member_assignment";
+        $$ = "array_assignment";
+    }
+    | IDENTIFIER ASSIGN array_init {
+        Symbol *sym = find_symbol($1);
+        if (!sym) {
+            char error[256];
+            snprintf(error, sizeof(error), "Undefined variable '%s'", $1);
+            yyerror(error);
+            YYERROR;
+        }
+        if (!sym->is_array) {
+            char error[256];
+            snprintf(error, sizeof(error), "Variable '%s' is not an array", $1);
+            yyerror(error);
+            YYERROR;
+        }
+        assignments++;
+        log_assignment($1, "array values", sym->type);
+        $$ = "array_assignment";
     }
     | IDENTIFIER ASSIGN collection_init {
         Symbol *sym = find_collection_var($1);
@@ -687,24 +1149,6 @@ assignment
         assignments++;
         log_assignment($1, "collection initializer", sym->type);
         $$ = "collection_assignment";
-    }
-    | IDENTIFIER ASSIGN '[' array_values ']' {
-        Symbol *sym = find_symbol($1);
-        if (!sym) {
-            char error[256];
-            snprintf(error, sizeof(error), "Undefined variable '%s'", $1);
-            yyerror(error);
-            YYERROR;
-        }
-        if (!sym->is_array) {
-            char error[256];
-            snprintf(error, sizeof(error), "Variable '%s' is not an array", $1);
-            yyerror(error);
-            YYERROR;
-        }
-        assignments++;
-        log_assignment($1, "array values", sym->type);
-        $$ = "array_assignment";
     }
     ;
 
@@ -750,8 +1194,9 @@ member_assignment
             yyerror(error);
             YYERROR;
         }
+        $$ = $1;
     }
-    | IDENTIFIER ASSIGN '[' array_values ']' {
+    | IDENTIFIER ASSIGN array_init {
         Symbol *current = find_symbol($<sval>0);  // Get the collection variable being initialized
         if (!current) {
             yyerror("Invalid collection initialization context");
@@ -790,12 +1235,23 @@ member_assignment
             yyerror(error);
             YYERROR;
         }
+        $$ = $1;
     }
     ;
 
-array_values
-    : expression                          { $$ = $1; }
-    | array_values ',' expression         { $$ = $3; }
+array_init
+    : '[' array_values_list ']'    { $$ = $2; }
+    | '[' ']'                      { $$ = ""; }  // Explicit empty array rule
+    ;
+
+array_values_list
+    : expression                   { $$ = $1; }
+    | array_values_list ',' expression { 
+        char* result = malloc(strlen($1) + strlen($3) + 3);
+        sprintf(result, "%s, %s", $1, $3);
+        free($1);
+        $$ = result;
+    }
     ;
 
 if_statement
@@ -915,12 +1371,23 @@ expression
     | collection_expression       { $$ = $1; }
     | function_expression         { $$ = strdup($1); }
     | '(' expression ')'          { 
-                                   char* result = malloc(strlen($2) + 3);  // Space for parentheses and null
+                                   char* result = malloc(strlen($2) + 3);
                                    sprintf(result, "(%s)", $2);
                                    free($2);
                                    $$ = result;
                                  }
     | expression '+' expression   { 
+                                   char* type1 = get_expression_type($1);
+                                   char* type2 = get_expression_type($3);
+                                   char* result_type = get_result_type("+", type1, type2);
+                                   if (!result_type) {
+                                       char error[256];
+                                       snprintf(error, sizeof(error), 
+                                              "Type mismatch in addition: cannot add '%s' and '%s'", 
+                                              type1 ? type1 : "unknown", type2 ? type2 : "unknown");
+                                       yyerror(error);
+                                       YYERROR;
+                                   }
                                    char* result = malloc(strlen($1) + strlen($3) + 4);
                                    sprintf(result, "%s + %s", $1, $3);
                                    log_operation("Addition", $1, $3, result);
@@ -929,6 +1396,17 @@ expression
                                    $$ = result;
                                  }
     | expression '-' expression   { 
+                                   char* type1 = get_expression_type($1);
+                                   char* type2 = get_expression_type($3);
+                                   char* result_type = get_result_type("-", type1, type2);
+                                   if (!result_type) {
+                                       char error[256];
+                                       snprintf(error, sizeof(error), 
+                                              "Type mismatch in subtraction: cannot subtract '%s' from '%s'", 
+                                              type2 ? type2 : "unknown", type1 ? type1 : "unknown");
+                                       yyerror(error);
+                                       YYERROR;
+                                   }
                                    char* result = malloc(strlen($1) + strlen($3) + 4);
                                    sprintf(result, "%s - %s", $1, $3);
                                    log_operation("Subtraction", $1, $3, result);
@@ -937,6 +1415,17 @@ expression
                                    $$ = result;
                                  }
     | expression '*' expression   { 
+                                   char* type1 = get_expression_type($1);
+                                   char* type2 = get_expression_type($3);
+                                   char* result_type = get_result_type("*", type1, type2);
+                                   if (!result_type) {
+                                       char error[256];
+                                       snprintf(error, sizeof(error), 
+                                              "Type mismatch in multiplication: cannot multiply '%s' and '%s'", 
+                                              type1 ? type1 : "unknown", type2 ? type2 : "unknown");
+                                       yyerror(error);
+                                       YYERROR;
+                                   }
                                    char* result = malloc(strlen($1) + strlen($3) + 4);
                                    sprintf(result, "%s * %s", $1, $3);
                                    log_operation("Multiplication", $1, $3, result);
@@ -945,6 +1434,17 @@ expression
                                    $$ = result;
                                  }
     | expression '/' expression   { 
+                                   char* type1 = get_expression_type($1);
+                                   char* type2 = get_expression_type($3);
+                                   char* result_type = get_result_type("/", type1, type2);
+                                   if (!result_type) {
+                                       char error[256];
+                                       snprintf(error, sizeof(error), 
+                                              "Type mismatch in division: cannot divide '%s' by '%s'", 
+                                              type1 ? type1 : "unknown", type2 ? type2 : "unknown");
+                                       yyerror(error);
+                                       YYERROR;
+                                   }
                                    char* result = malloc(strlen($1) + strlen($3) + 4);
                                    sprintf(result, "%s / %s", $1, $3);
                                    log_operation("Division", $1, $3, result);
@@ -953,6 +1453,17 @@ expression
                                    $$ = result;
                                  }
     | expression '%' expression   { 
+                                   char* type1 = get_expression_type($1);
+                                   char* type2 = get_expression_type($3);
+                                   char* result_type = get_result_type("%", type1, type2);
+                                   if (!result_type) {
+                                       char error[256];
+                                       snprintf(error, sizeof(error), 
+                                              "Type mismatch in modulo: operands must be integers, got '%s' and '%s'", 
+                                              type1 ? type1 : "unknown", type2 ? type2 : "unknown");
+                                       yyerror(error);
+                                       YYERROR;
+                                   }
                                    char* result = malloc(strlen($1) + strlen($3) + 4);
                                    sprintf(result, "%s %% %s", $1, $3);
                                    log_operation("Modulo", $1, $3, result);
@@ -961,6 +1472,17 @@ expression
                                    $$ = result;
                                  }
     | expression '&' expression   { 
+                                   char* type1 = get_expression_type($1);
+                                   char* type2 = get_expression_type($3);
+                                   char* result_type = get_result_type("&", type1, type2);
+                                   if (!result_type) {
+                                       char error[256];
+                                       snprintf(error, sizeof(error), 
+                                              "Type mismatch in bitwise AND: operands must be integers, got '%s' and '%s'", 
+                                              type1 ? type1 : "unknown", type2 ? type2 : "unknown");
+                                       yyerror(error);
+                                       YYERROR;
+                                   }
                                    char* result = malloc(strlen($1) + strlen($3) + 4);
                                    sprintf(result, "%s & %s", $1, $3);
                                    log_operation("Bitwise AND", $1, $3, result);
@@ -969,6 +1491,17 @@ expression
                                    $$ = result;
                                  }
     | expression '|' expression   { 
+                                   char* type1 = get_expression_type($1);
+                                   char* type2 = get_expression_type($3);
+                                   char* result_type = get_result_type("|", type1, type2);
+                                   if (!result_type) {
+                                       char error[256];
+                                       snprintf(error, sizeof(error), 
+                                              "Type mismatch in bitwise OR: operands must be integers, got '%s' and '%s'", 
+                                              type1 ? type1 : "unknown", type2 ? type2 : "unknown");
+                                       yyerror(error);
+                                       YYERROR;
+                                   }
                                    char* result = malloc(strlen($1) + strlen($3) + 4);
                                    sprintf(result, "%s | %s", $1, $3);
                                    log_operation("Bitwise OR", $1, $3, result);
@@ -977,6 +1510,17 @@ expression
                                    $$ = result;
                                  }
     | expression '^' expression   { 
+                                   char* type1 = get_expression_type($1);
+                                   char* type2 = get_expression_type($3);
+                                   char* result_type = get_result_type("^", type1, type2);
+                                   if (!result_type) {
+                                       char error[256];
+                                       snprintf(error, sizeof(error), 
+                                              "Type mismatch in bitwise XOR: operands must be integers, got '%s' and '%s'", 
+                                              type1 ? type1 : "unknown", type2 ? type2 : "unknown");
+                                       yyerror(error);
+                                       YYERROR;
+                                   }
                                    char* result = malloc(strlen($1) + strlen($3) + 4);
                                    sprintf(result, "%s ^ %s", $1, $3);
                                    log_operation("Bitwise XOR", $1, $3, result);
@@ -985,6 +1529,15 @@ expression
                                    $$ = result;
                                  }
     | '~' expression             { 
+                                   char* type = get_expression_type($2);
+                                   if (!type || strcmp(type, "int") != 0) {
+                                       char error[256];
+                                       snprintf(error, sizeof(error), 
+                                              "Type mismatch in bitwise NOT: operand must be integer, got '%s'", 
+                                              type ? type : "unknown");
+                                       yyerror(error);
+                                       YYERROR;
+                                   }
                                    char* result = malloc(strlen($2) + 2);
                                    sprintf(result, "~%s", $2);
                                    log_operation("Bitwise NOT", $2, "", result);
@@ -992,6 +1545,17 @@ expression
                                    $$ = result;
                                  }
     | expression EQ expression    { 
+                                   char* type1 = get_expression_type($1);
+                                   char* type2 = get_expression_type($3);
+                                   char* result_type = get_result_type("==", type1, type2);
+                                   if (!result_type) {
+                                       char error[256];
+                                       snprintf(error, sizeof(error), 
+                                              "Type mismatch in equality comparison: cannot compare '%s' and '%s'", 
+                                              type1 ? type1 : "unknown", type2 ? type2 : "unknown");
+                                       yyerror(error);
+                                       YYERROR;
+                                   }
                                    char* result = malloc(strlen($1) + strlen($3) + 5);
                                    sprintf(result, "%s == %s", $1, $3);
                                    log_operation("Equals", $1, $3, result);
@@ -1000,6 +1564,17 @@ expression
                                    $$ = result;
                                  }
     | expression LT expression    { 
+                                   char* type1 = get_expression_type($1);
+                                   char* type2 = get_expression_type($3);
+                                   char* result_type = get_result_type("<", type1, type2);
+                                   if (!result_type) {
+                                       char error[256];
+                                       snprintf(error, sizeof(error), 
+                                              "Type mismatch in less than comparison: cannot compare '%s' and '%s'", 
+                                              type1 ? type1 : "unknown", type2 ? type2 : "unknown");
+                                       yyerror(error);
+                                       YYERROR;
+                                   }
                                    char* result = malloc(strlen($1) + strlen($3) + 4);
                                    sprintf(result, "%s < %s", $1, $3);
                                    log_operation("Less Than", $1, $3, result);
@@ -1008,6 +1583,17 @@ expression
                                    $$ = result;
                                  }
     | expression GT expression    { 
+                                   char* type1 = get_expression_type($1);
+                                   char* type2 = get_expression_type($3);
+                                   char* result_type = get_result_type(">", type1, type2);
+                                   if (!result_type) {
+                                       char error[256];
+                                       snprintf(error, sizeof(error), 
+                                              "Type mismatch in greater than comparison: cannot compare '%s' and '%s'", 
+                                              type1 ? type1 : "unknown", type2 ? type2 : "unknown");
+                                       yyerror(error);
+                                       YYERROR;
+                                   }
                                    char* result = malloc(strlen($1) + strlen($3) + 4);
                                    sprintf(result, "%s > %s", $1, $3);
                                    log_operation("Greater Than", $1, $3, result);
@@ -1016,6 +1602,17 @@ expression
                                    $$ = result;
                                  }
     | expression LE expression    { 
+                                   char* type1 = get_expression_type($1);
+                                   char* type2 = get_expression_type($3);
+                                   char* result_type = get_result_type("<=", type1, type2);
+                                   if (!result_type) {
+                                       char error[256];
+                                       snprintf(error, sizeof(error), 
+                                              "Type mismatch in less than or equal comparison: cannot compare '%s' and '%s'", 
+                                              type1 ? type1 : "unknown", type2 ? type2 : "unknown");
+                                       yyerror(error);
+                                       YYERROR;
+                                   }
                                    char* result = malloc(strlen($1) + strlen($3) + 5);
                                    sprintf(result, "%s <= %s", $1, $3);
                                    log_operation("Less Equal", $1, $3, result);
@@ -1024,6 +1621,17 @@ expression
                                    $$ = result;
                                  }
     | expression GE expression    { 
+                                   char* type1 = get_expression_type($1);
+                                   char* type2 = get_expression_type($3);
+                                   char* result_type = get_result_type(">=", type1, type2);
+                                   if (!result_type) {
+                                       char error[256];
+                                       snprintf(error, sizeof(error), 
+                                              "Type mismatch in greater than or equal comparison: cannot compare '%s' and '%s'", 
+                                              type1 ? type1 : "unknown", type2 ? type2 : "unknown");
+                                       yyerror(error);
+                                       YYERROR;
+                                   }
                                    char* result = malloc(strlen($1) + strlen($3) + 5);
                                    sprintf(result, "%s >= %s", $1, $3);
                                    log_operation("Greater Equal", $1, $3, result);
@@ -1032,6 +1640,17 @@ expression
                                    $$ = result;
                                  }
     | expression AND expression   { 
+                                   char* type1 = get_expression_type($1);
+                                   char* type2 = get_expression_type($3);
+                                   char* result_type = get_result_type("&&", type1, type2);
+                                   if (!result_type) {
+                                       char error[256];
+                                       snprintf(error, sizeof(error), 
+                                              "Type mismatch in logical AND: operands must be boolean, got '%s' and '%s'", 
+                                              type1 ? type1 : "unknown", type2 ? type2 : "unknown");
+                                       yyerror(error);
+                                       YYERROR;
+                                   }
                                    char* result = malloc(strlen($1) + strlen($3) + 5);
                                    sprintf(result, "%s && %s", $1, $3);
                                    log_operation("Logical AND", $1, $3, result);
@@ -1040,6 +1659,17 @@ expression
                                    $$ = result;
                                  }
     | expression OR expression    { 
+                                   char* type1 = get_expression_type($1);
+                                   char* type2 = get_expression_type($3);
+                                   char* result_type = get_result_type("||", type1, type2);
+                                   if (!result_type) {
+                                       char error[256];
+                                       snprintf(error, sizeof(error), 
+                                              "Type mismatch in logical OR: operands must be boolean, got '%s' and '%s'", 
+                                              type1 ? type1 : "unknown", type2 ? type2 : "unknown");
+                                       yyerror(error);
+                                       YYERROR;
+                                   }
                                    char* result = malloc(strlen($1) + strlen($3) + 5);
                                    sprintf(result, "%s || %s", $1, $3);
                                    log_operation("Logical OR", $1, $3, result);
@@ -1048,6 +1678,15 @@ expression
                                    $$ = result;
                                  }
     | NOT expression             { 
+                                   char* type = get_expression_type($2);
+                                   if (!type || strcmp(type, "bool") != 0) {
+                                       char error[256];
+                                       snprintf(error, sizeof(error), 
+                                              "Type mismatch in logical NOT: operand must be boolean, got '%s'", 
+                                              type ? type : "unknown");
+                                       yyerror(error);
+                                       YYERROR;
+                                   }
                                    char* result = malloc(strlen($2) + 2);
                                    sprintf(result, "!%s", $2);
                                    log_operation("Logical NOT", $2, "", result);
@@ -1055,6 +1694,15 @@ expression
                                    $$ = result;
                                  }
     | '-' expression %prec UMINUS { 
+                                   char* type = get_expression_type($2);
+                                   if (!type || (strcmp(type, "int") != 0 && strcmp(type, "float") != 0)) {
+                                       char error[256];
+                                       snprintf(error, sizeof(error), 
+                                              "Type mismatch in unary minus: operand must be numeric, got '%s'", 
+                                              type ? type : "unknown");
+                                       yyerror(error);
+                                       YYERROR;
+                                   }
                                    char* result = malloc(strlen($2) + 2);
                                    sprintf(result, "-%s", $2);
                                    log_operation("Negation", $2, "", result);
@@ -1088,8 +1736,22 @@ array_expression
             yyerror(error);
             YYERROR;
         }
+        
+        // Check index type
+        char* index_type = get_expression_type($3);
+        if (!index_type || strcmp(index_type, "int") != 0) {
+            char error[256];
+            snprintf(error, sizeof(error), "Array index must be integer, got '%s'", 
+                    index_type ? index_type : "unknown");
+            yyerror(error);
+            YYERROR;
+        }
+        
+        // Create array access expression with brackets
+        char* result = malloc(strlen($1) + strlen($3) + 4); // +4 for '[', ']', and '\0'
+        sprintf(result, "%s[%s]", $1, $3);
         log_array_access($1, $3);
-        $$ = $1;
+        $$ = result;
     }
     | collection_expression '[' expression ']' {
         // Handle array access on collection members
@@ -1099,8 +1761,71 @@ array_expression
             yyerror(error);
             YYERROR;
         }
+        
+        // Extract collection and member names
+        char* expr_copy = strdup($1);
+        char* dot = strchr(expr_copy, '.');
+        if (!dot) {
+            free(expr_copy);
+            yyerror("Invalid collection member access");
+            YYERROR;
+        }
+        *dot = '\0';
+        char* member_name = dot + 1;
+        
+        // Verify collection and member
+        Symbol* col_var = find_collection_var(expr_copy);
+        if (!col_var) {
+            char error[256];
+            snprintf(error, sizeof(error), "Undefined collection variable '%s'", expr_copy);
+            free(expr_copy);
+            yyerror(error);
+            YYERROR;
+        }
+        
+        Collection* col_type = find_collection_type(col_var->type);
+        if (!col_type) {
+            char error[256];
+            snprintf(error, sizeof(error), "Invalid collection type for '%s'", expr_copy);
+            free(expr_copy);
+            yyerror(error);
+            YYERROR;
+        }
+        
+        Symbol* member = NULL;
+        for (Symbol* s = symbol_table; s != NULL; s = s->next) {
+            if (s->collection_name && strcmp(s->collection_name, col_type->name) == 0 && 
+                strcmp(s->name, member_name) == 0) {
+                member = s;
+                break;
+            }
+        }
+        
+        if (!member || !member->is_array) {
+            char error[256];
+            snprintf(error, sizeof(error), "Member '%s' is not an array", member_name);
+            free(expr_copy);
+            yyerror(error);
+            YYERROR;
+        }
+        
+        // Check index type
+        char* index_type = get_expression_type($3);
+        if (!index_type || strcmp(index_type, "int") != 0) {
+            char error[256];
+            snprintf(error, sizeof(error), "Array index must be integer, got '%s'", 
+                    index_type ? index_type : "unknown");
+            free(expr_copy);
+            yyerror(error);
+            YYERROR;
+        }
+        
+        // Create array access expression with brackets
+        char* result = malloc(strlen($1) + strlen($3) + 4); // +4 for '[', ']', and '\0'
+        sprintf(result, "%s[%s]", $1, $3);
         log_array_access($1, $3);
-        $$ = $1;
+        free(expr_copy);
+        $$ = result;
     }
     ;
 
@@ -1115,7 +1840,8 @@ collection_expression
                 yyerror(error);
             } else {
                 char error[256];
-                snprintf(error, sizeof(error), "Variable '%s' of type '%s' is not a collection", $1, var->type);
+                snprintf(error, sizeof(error), "Variable '%s' of type '%s' is not a collection", 
+                        $1, var->type);
                 yyerror(error);
             }
             YYERROR;
@@ -1155,16 +1881,127 @@ function_expression
             yyerror(error);
             YYERROR;
         }
+        
+        // Count arguments
+        int arg_count = 0;
+        if (strlen($3) > 0) {  // If argument list is not empty
+            arg_count = 1;  // Start with 1 for the first argument
+            for (char* p = $3; *p; p++) {
+                if (*p == ',') arg_count++;  // Count commas for additional arguments
+            }
+        }
+        
+        // Count parameters
+        int param_count = 0;
+        for (Symbol* param = func->params; param != NULL; param = param->next) {
+            param_count++;
+        }
+        
+        if (arg_count != param_count) {
+            char error[256];
+            if (arg_count < param_count) {
+                snprintf(error, sizeof(error), "Too few arguments in call to function '%s'", $1);
+            } else {
+                snprintf(error, sizeof(error), "Too many arguments in call to function '%s'", $1);
+            }
+            yyerror(error);
+            YYERROR;
+        }
+        
+        // Check argument types
+        Symbol *param = func->params;
+        char *arg_list = strdup($3);
+        char *arg = strtok(arg_list, ",");
+        
+        while (param && arg) {
+            // Skip whitespace
+            while (*arg && isspace(*arg)) arg++;
+            
+            // Check if argument is a collection member array access
+            char* dot = strchr(arg, '.');
+            if (dot) {
+                char* expr_copy = strdup(arg);
+                char* dot_pos = strchr(expr_copy, '.');
+                *dot_pos = '\0';
+                char* col_name = expr_copy;
+                char* member_name = dot_pos + 1;
+                
+                Symbol* col_var = find_collection_var(col_name);
+                if (col_var) {
+                    Collection* col_type = find_collection_type(col_var->type);
+                    if (col_type) {
+                        for (Symbol* s = symbol_table; s != NULL; s = s->next) {
+                            if (s->collection_name && strcmp(s->collection_name, col_type->name) == 0 && 
+                                strcmp(s->name, member_name) == 0) {
+                                if (s->is_array != param->is_array) {
+                                    char error[256];
+                                    snprintf(error, sizeof(error), 
+                                          "Type mismatch in function call: argument '%s' array type mismatch with parameter '%s'",
+                                          arg, param->name);
+                                    free(expr_copy);
+                                    free(arg_list);
+                                    yyerror(error);
+                                    YYERROR;
+                                }
+                                
+                                if (!are_types_compatible(param->type, s->type)) {
+                                    char error[256];
+                                    snprintf(error, sizeof(error), 
+                                            "Type mismatch in function call: argument '%s' of type '%s' cannot be passed to parameter '%s' of type '%s'",
+                                            arg, s->type, param->name, param->type);
+                                    free(expr_copy);
+                                    free(arg_list);
+                                    yyerror(error);
+                                    YYERROR;
+                                }
+                                free(expr_copy);
+                                break;
+                            }
+                        }
+                    }
+                }
+                free(expr_copy);
+            } else {
+                // Regular argument type check
+                char* arg_type = get_expression_type(arg);
+                
+                if (!are_types_compatible(param->type, arg_type)) {
+                    char error[256];
+                    snprintf(error, sizeof(error), 
+                            "Type mismatch in function call: argument '%s' of type '%s' cannot be passed to parameter '%s' of type '%s'",
+                            arg, arg_type ? arg_type : "unknown", param->name, param->type);
+                    if (arg_type) free(arg_type);
+                    free(arg_list);
+                    yyerror(error);
+                    YYERROR;
+                }
+                if (arg_type) free(arg_type);
+            }
+            
+            param = param->next;
+            arg = strtok(NULL, ",");
+        }
+        
+        free(arg_list);
         function_calls++;
-        log_function_call($1, 1);
-        $$ = $1;
+        log_function_call($1, arg_count);
+        
+        // Create function call expression
+        char* result = malloc(strlen($1) + strlen($3) + 4);
+        sprintf(result, "%s(%s)", $1, $3);
+        $$ = result;
     }
     ;
 
 argument_list
     : /* empty */                  { $$ = ""; }
     | expression                   { $$ = $1; }
-    | argument_list ',' expression { $$ = $3; }
+    | argument_list ',' expression { 
+        char* result = malloc(strlen($1) + strlen($3) + 3);
+        sprintf(result, "%s, %s", $1, $3);
+        free($1);
+        $$ = result;
+    }
     ;
 
 type
@@ -1190,25 +2027,34 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    // Open output file
+    output_file = fopen("output.txt", "w");
+    if (!output_file) {
+        fprintf(stderr, "Error: Cannot create output file 'output.txt'\n");
+        fclose(input);
+        return 1;
+    }
+
     yyin = input;
 
-    printf("Parsing file: %s\n\n", argv[1]);
+    fprintf(output_file, "Parsing file: %s\n\n", argv[1]);
     int result = yyparse();
     
-    printf("\n=== Compilation Statistics ===\n");
-    printf("Declarations: %d\n", declarations);
-    printf("Assignments: %d\n", assignments);
-    printf("Function Calls: %d\n", function_calls);
-    printf("Conditions: %d\n", conditions);
-    printf("Loops: %d\n", loops);
+    fprintf(output_file, "\n=== Compilation Statistics ===\n");
+    fprintf(output_file, "Declarations: %d\n", declarations);
+    fprintf(output_file, "Assignments: %d\n", assignments);
+    fprintf(output_file, "Function Calls: %d\n", function_calls);
+    fprintf(output_file, "Conditions: %d\n", conditions);
+    fprintf(output_file, "Loops: %d\n", loops);
     
     fclose(input);
+    fclose(output_file);
     return result;
 }
 
 void yyerror(const char *s) {
-    fprintf(stderr, "Error at line %d: %s\n", line_number, s);
-    fprintf(stderr, "Near token: '%s'\n", yytext);
+    fprintf(output_file, "Error at line %d: %s\n", line_number, s);
+    fprintf(output_file, "Near token: '%s'\n", yytext);
 }
 
 void print_scope_info(const char *action, const char *details) {
@@ -1219,34 +2065,17 @@ void print_scope_info(const char *action, const char *details) {
     
     char context[512] = "";
     
-    printf("Line %-5d%s: %s%s: %s\n", line_number, context, indent, action, details);
+    fprintf(output_file, "Line %-5d%s: %s%s: %s\n", line_number, context, indent, action, details);
 }
 
 void enter_scope(void) {
     scope_level++;
-    char indent[256] = "";
-    for (int i = 0; i < scope_level; i++) {
-        strcat(indent, "  ");
-    }
-    // printf("Line %-5d: %sEntering scope level %d\n", line_number, indent, scope_level);
 }
 
 void exit_scope(void) {
     if (scope_level > 0) {
-        cleanup_temporary_symbols(scope_level);  // Clean up temporary symbols before exiting scope
+        cleanup_temporary_symbols(scope_level);
         scope_level--;
-        char indent[512] = "";
-        for (int i = 0; i < scope_level; i++) strcat(indent, "  ");
-        char context[512] = "";
-        if (current_function[0] != '\0') {
-            snprintf(context, sizeof(context), "", current_function);
-        }
-        // printf("Line %-5d%s: %sExiting scope level %d\n", 
-        //       line_number, context, indent, scope_level + 1);
-        
-        if (scope_level == 0) {
-            current_function[0] = '\0';  // Clear function context at global scope
-        }
     }
 }
 
@@ -1446,10 +2275,10 @@ void log_declaration(const char *kind, const char *name, const char *type, const
     char context[512] = "";
     
     if (value) {
-        printf("Line %-5d%s: %s%s Declaration: %s of type %s = %s\n", 
+        fprintf(output_file, "Line %-5d%s: %s%s Declaration: %s of type %s = %s\n", 
                line_number, context, indent, kind, name, type, value);
     } else {
-        printf("Line %-5d%s: %s%s Declaration: %s of type %s\n", 
+        fprintf(output_file, "Line %-5d%s: %s%s Declaration: %s of type %s\n", 
                line_number, context, indent, kind, name, type);
     }
 }
@@ -1462,7 +2291,7 @@ void log_assignment(const char *target, const char *value, const char *type) {
     
     char context[512] = "";
     
-    printf("Line %-5d%s: %sAssignment: %s = %s (type: %s)\n", 
+    fprintf(output_file, "Line %-5d%s: %sAssignment: %s = %s (type: %s)\n", 
            line_number, context, indent, target, value, type);
 }
 
@@ -1475,10 +2304,10 @@ void log_operation(const char *op, const char *left, const char *right, const ch
     char context[512] = "";
     
     if (right[0] != '\0') {
-        printf("Line %-5d%s: %sOperation: %s (%s, %s) = %s\n", 
+        fprintf(output_file, "Line %-5d%s: %sOperation: %s (%s, %s) = %s\n", 
                line_number, context, indent, op, left, right, result);
     } else {
-        printf("Line %-5d%s: %sOperation: %s (%s) = %s\n", 
+        fprintf(output_file, "Line %-5d%s: %sOperation: %s (%s) = %s\n", 
                line_number, context, indent, op, left, result);
     }
 }
@@ -1489,7 +2318,7 @@ void log_function_call(const char *name, int arg_count) {
         strcat(indent, "  ");
     }
     
-    printf("Line %-5d: %sFunction Call: %s with %d argument(s)\n", 
+    fprintf(output_file, "Line %-5d: %sFunction Call: %s with %d argument(s)\n", 
            line_number, indent, name, arg_count);
 }
 
@@ -1500,10 +2329,10 @@ void log_condition(const char *type, const char *condition) {
     }
     
     if (condition[0] != '\0') {
-        printf("Line %-5d: %s%s Condition: %s\n", 
+        fprintf(output_file, "Line %-5d: %s%s Condition: %s\n", 
                line_number, indent, type, condition);
     } else {
-        printf("Line %-5d: %s%s Branch\n", 
+        fprintf(output_file, "Line %-5d: %s%s Branch\n", 
                line_number, indent, type);
     }
 }
@@ -1514,7 +2343,7 @@ void log_loop(const char *type, const char *condition) {
         strcat(indent, "  ");
     }
     
-    printf("Line %-5d: %s%s: %s\n", 
+    fprintf(output_file, "Line %-5d: %s%s: %s\n", 
            line_number, indent, type, condition);
 }
 
@@ -1524,7 +2353,7 @@ void log_collection_access(const char *collection, const char *member) {
         strcat(indent, "  ");
     }
     
-    printf("Line %-5d: %sCollection Access: %s.%s\n", 
+    fprintf(output_file, "Line %-5d: %sCollection Access: %s.%s\n", 
            line_number, indent, collection, member);
 }
 
@@ -1534,7 +2363,7 @@ void log_array_access(const char *array, const char *index) {
         strcat(indent, "  ");
     }
     
-    printf("Line %-5d: %sArray Access: %s[%s]\n", 
+    fprintf(output_file, "Line %-5d: %sArray Access: %s[%s]\n", 
            line_number, indent, array, index);
 }
 
@@ -1550,10 +2379,10 @@ void log_case(const char *type, const char *value) {
     }
     
     if (value && value[0] != '\0') {
-        printf("Line %-5d%s: %s%s: %s\n", 
+        fprintf(output_file, "Line %-5d%s: %s%s: %s\n", 
                line_number, context, indent, type, value);
     } else {
-        printf("Line %-5d%s: %s%s\n", 
+        fprintf(output_file, "Line %-5d%s: %s%s\n", 
                line_number, context, indent, type);
     }
 }
